@@ -1,6 +1,7 @@
 import Editor, { DiffEditor } from '@monaco-editor/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { MarkdownRenderer } from '../components/MarkdownRenderer'
 import { streamAttributionAnalysis, streamReviewAnalysis, streamSolutionAnalysis } from '../lib/analysisApi'
 import { createSubmission, listSubmissions } from '../lib/submissionApi'
 import type { AnalysisResult, AnalysisStreamMeta } from '../types/analysis'
@@ -880,7 +881,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                   <article className="statement-panel">
                     <section>
                       <h2>题面</h2>
-                      <p>{problem.statement_markdown}</p>
+                      <MarkdownRenderer markdown={problem.statement_markdown} />
                     </section>
                     <section>
                       <h3>约束</h3>

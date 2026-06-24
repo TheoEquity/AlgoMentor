@@ -1439,6 +1439,46 @@ code {
   background: rgba(194, 122, 26, 0.08);
 }
 
+.markdown-body {
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.markdown-body p {
+  margin-bottom: var(--space-3);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5rem;
+  margin-bottom: var(--space-3);
+}
+
+.markdown-body li {
+  margin-bottom: var(--space-1);
+}
+
+.markdown-body code {
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body .katex-display {
+  margin: var(--space-3) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown-body .katex {
+  font-size: 1.05em;
+}
+
 @media (max-width: 900px) {
   .workspace-content-split {
     grid-template-columns: 1fr;
