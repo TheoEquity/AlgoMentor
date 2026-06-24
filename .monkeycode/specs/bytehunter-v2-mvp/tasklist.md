@@ -1,0 +1,71 @@
+# 需求实施计划
+
+- [x] 1. 搭建 ByteHunter MVP 的项目骨架与基础依赖
+  - 创建前后端目录结构、环境配置模板和本地开发启动方式，对应 Requirement 8.2、8.4 和 design.md 的 Architecture。
+  - 配置 FastAPI、PostgreSQL、Redis、Judge0 CE、前端应用骨架和共享配置，确保 ACM 模式在线判题 IDE 与后端服务边界清晰，对应 Requirement 2.1、3.1、8.2。
+  - 为后端定义基础路由前缀、Pydantic 模型基类、数据库会话管理和统一错误响应结构，对应 design.md 的 Components and Interfaces、Error Handling。
+  - 为前端定义页面路由、API Client、状态管理入口和 Monaco 编辑器集成壳层，对应 Requirement 2.1、2.5 和 design.md 的 ACM Style Online Judge IDE。
+  - 为前端定义全局视觉变量、字体方案、传统后台布局规范和非卡片化组件约束，对应 design.md 的 UI Style Direction。
+  - 为前端整理全局 Shell、题库页、做题页、复盘页的组件清单和页面状态模型，对应 design.md 的 Component Inventory、Page States。
+  - 为前端整理颜色、字号、间距、表格密度、Verdict 状态色和布局尺寸 token，对应 design.md 的 Design Tokens。
+  - 为前端定义 Tailwind 主题映射、Shadcn 组件使用边界和样式反模式约束，对应 design.md 的 Frontend Implementation Mapping。
+  - [x] 1.1 编写基础配置与启动流程测试
+    - 为后端配置加载、数据库连接初始化和前端 API Client 基础行为编写单元测试。
+
+- [x] 2. 实现题库与手工录题能力
+  - 实现 `Problem`、`ProblemTestCase` 数据模型、数据库迁移和结构化校验，对应 Requirement 1.1、1.2、1.5 和 design.md 的 Data Models。
+  - 实现题目创建、题目列表、题目详情接口，支持公司、部门、难度、标签和语言筛选，对应 Requirement 1.2、1.3、1.4。
+  - 实现题目语言模板、样例、约束和来源字段的持久化，保证未来批量导入兼容性，对应 Requirement 1.5、8.1 和 Correctness Property 4。
+  - 在前端实现题库列表页和题目详情页，展示题面、样例、约束、支持语言和训练入口，对应 Requirement 1.3、1.4。
+  - [x] 2.1 编写题库数据模型与接口测试
+    - 为录题校验、筛选查询和详情读取编写单元测试与集成测试。
+  - [x] 2.2 编写 Problem 数据兼容性属性测试
+    - 验证手工录题数据在存在 `source_type`、`source_ref`、`external_id` 时保持结构完整，对应 Correctness Property 4。
+
+- [x] 3. 实现 ACM 模式在线判题 IDE 与提交主链路
+  - 在前端集成 Monaco Editor，支持 Python、C++、Java 三种语言切换和默认模板加载，对应 Requirement 2.1、2.2。
+  - 实现左侧主菜单、顶部筛选区、题库表格布局，以及做题页的主区加右侧工作区布局，避免四列并排和瀑布卡片式信息堆叠，对应 design.md 的 UI Style Direction。
+  - 实现题库表格、做题页工作区、右侧结果面板和底部抽屉等页面组件，并按页面状态切换展示，对应 design.md 的 Component Inventory、Page States。
+  - 实现代码草稿保存、运行状态展示、自定义输入区和提交按钮交互，对应 Requirement 2.3、2.5、2.6、2.7。
+  - 实现 `Submission` 数据模型和 `POST /api/v1/submissions`、`GET /api/v1/submissions/{submission_id}` 接口，对应 Requirement 2.4、6.1 和 design.md 的 Submission。
+  - 实现 Judge Service，对接 Judge0 CE 提交、轮询和 Verdict 归一化逻辑，支持 `Run` 多测点与 `Submit` 正式判题，覆盖 AC、WA、TLE、RE、CE，对应 Requirement 3.1、3.2、3.3、3.4、3.5、3.6、3.7。
+  - 在前端展示 Verdict、运行时间、内存、编译错误、RE 堆栈和失败样例差异，对应 Requirement 3.2、3.3、3.4、3.5、3.6、3.7。
+  - 集成 Monaco DiffEditor 展示 WA 场景的 stdout 与 expected 差异，对应 Requirement 3.6 和 design.md 的 DiffViewerPanel。
+  - [x] 3.1 编写 Judge Service 归一化测试
+    - 为 Python、C++、Java 的 AC、WA、CE、RE、TLE 结果编写集成测试。
+  - [x] 3.2 编写 Submission 绑定属性测试
+    - 验证每次提交只绑定单一题目和单一语言，对应 Correctness Property 1。
+  - [x] 3.3 检查点 - 确保所有测试通过,如有疑问请询问用户
+
+- [x] 4. 实现 AI 解题分析与错误归因能力
+  - 实现 AI Analysis Service 的基础调用链路，封装模型请求、上下文组装和统一响应结构，对应 Requirement 4.1、4.2、5.1、5.2、8.2。
+  - 实现 `POST /api/v1/analysis/solution` 和 `POST /api/v1/analysis/attribution` 接口，返回解题分析、错误分类、修正建议、可高亮行号和 hover 解释文本，对应 Requirement 4.1、4.2、4.4、4.5、5.3、5.4、5.5、5.6、5.7。
+  - 实现初始错误分类体系和提交上下文拼装逻辑，覆盖边界处理、状态转移、贪心策略、复杂度、输入解析、整数溢出、初始化、循环条件，对应 Requirement 5.4。
+  - 实现 AI 面板流式展示、RE stderr 归因和 Monaco `deltaDecorations` 行高亮所需的数据结构，对应 Requirement 4.4、4.5、5.5、5.6、5.7 和 design.md 的 AI Analysis Service。
+  - 实现 RE 场景下基于 stderr 或堆栈片段的 AI 归因快捷入口，对应 Requirement 5.6。
+  - 为后续知识检索预留向量检索接口和上下文注入点，对应 Requirement 4.3、8.3。
+  - [x] 4.1 编写 AI Analysis Service 响应合约测试
+    - 验证解题分析、错误归因和行号高亮字段满足前端使用要求。
+  - [x] 4.2 编写 ErrorAttribution 绑定属性测试
+    - 验证每次错误归因只绑定已完成判题的 Submission，对应 Correctness Property 3。
+  - [x] 4.3 实现 AI 面板流式接口与增量渲染
+    - 新增分析流式接口、题目页增量文本展示，以及流结束后的结构化结果落盘与复用。
+    - 已补 SSE `status` 事件、`execution_status` 显式字段、重试上下文面板和完成度标签。
+
+- [x] 5. 实现复盘视图与重复训练闭环
+  - 实现 Review Service，支持提交记录聚合、错题筛选、错误类型筛选和最近提交展示，对应 Requirement 6.1、6.2、6.3、6.4。
+  - 在题目详情页接入历史提交列表、最新 Verdict 和错误归因摘要，对应 Requirement 6.2、6.3。
+  - 实现复盘页组件、筛选工具条、摘要条、列表和详情抽屉，支持按错题、公司、标签、错误类别筛选，并提供再次训练入口，对应 Requirement 6.4、7.1、7.4 和 design.md 的 Component Inventory、Page States。
+  - 实现相似题或继续训练推荐的占位逻辑，为后续变式题能力保留接口，对应 Requirement 7.2、7.3、7.4。
+  - [x] 5.1 编写 Review Service 查询测试
+    - 验证提交历史、错误归因绑定和筛选逻辑。
+  - [x] 5.2 编写 Verdict 展示一致性属性测试
+    - 验证前端展示的 Verdict、运行时间和内存来源于统一归一化结果，对应 Correctness Property 5。
+  - [x] 5.3 检查点 - 确保所有测试通过,如有疑问请询问用户
+
+- [x] 6. 完善异常处理与开发联调支撑
+  - 实现 Judge0 请求失败、轮询超时、AI 超时和输入校验失败的统一错误处理，对应 design.md 的 Error Handling 和 Requirement 3.5、4.4。
+  - [x] 在前端补齐加载态、失败提示、重试入口和空状态展示，保证主链路可调试、可恢复，对应 Requirement 2.5、3.2、4.4、6.2。
+  - [x] 为核心接口补齐种子数据、开发环境示例题和本地联调用脚本，对应 Requirement 1.1、1.4、8.4。
+  - [x] 6.1 编写端到端测试脚本
+    - 覆盖题目打开、代码提交、Verdict 展示、AI 分析触发和复盘浏览主路径。
