@@ -54,6 +54,7 @@ class SubmissionAnalysisSnapshot(BaseModel):
 
 class SubmissionResult(BaseModel):
     id: int
+    user_id: int
     problem_id: int
     language: Language
     run_type: RunType
@@ -68,6 +69,7 @@ class SubmissionResult(BaseModel):
     failed_expected_output: str | None = None
     failed_actual_output: str | None = None
     case_results: list[SubmissionCaseResult]
+    judge_token: str | None = None
     attribution_analysis: SubmissionAnalysisSnapshot | None = None
     review_analysis: SubmissionAnalysisSnapshot | None = None
     created_at: str

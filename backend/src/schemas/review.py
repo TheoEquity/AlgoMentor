@@ -22,8 +22,8 @@ class ReviewListItem(BaseModel):
     problem_id: int = Field(ge=1)
     title: str
     company: str
-    department: str
     difficulty: str
+    category_slug: str
     tags: list[str]
     language: Language
     run_type: RunType

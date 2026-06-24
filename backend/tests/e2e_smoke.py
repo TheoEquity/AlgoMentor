@@ -5,9 +5,12 @@ import sys
 from pathlib import Path
 
 
-SRC_DIR = Path(__file__).resolve().parents[1] / 'src'
+SYS_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = SYS_DIR / 'src'
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+if str(SYS_DIR) not in sys.path:
+    sys.path.insert(0, str(SYS_DIR))
 
 from api.routes.analysis import analyze_attribution, analyze_review, analyze_solution
 from api.routes.problems import get_problem
@@ -20,7 +23,7 @@ from repositories.submission_repository import SubmissionRepository
 from repositories.training_repository import TrainingRepository
 from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, SolutionAnalysisRequest
 from schemas.submissions import SubmissionCaseResult, SubmissionCreate, SubmissionResult
-from test_support import TemporaryDatabase
+from test_support import TEST_DATABASE_URL, reset_test_database
 
 
 class FakeJudgeService:
@@ -29,6 +32,7 @@ class FakeJudgeService:
         actual_output = '7' if verdict == 'AC' else '6'
         return SubmissionResult(
             id=submission_id,
+            user_id=1,
             problem_id=problem.id,
             language=payload.language,
             run_type=payload.run_type,
@@ -55,6 +59,7 @@ class FakeJudgeService:
                     stderr_output='',
                 )
             ],
+            judge_token=None,
             created_at=created_at,
         )
 
@@ -66,6 +71,8 @@ class FakeAnalysisService:
             provider=settings.provider,
             model=settings.solution_model,
             endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
             title='解题分析',
             summary=f'题目 {problem.title} 已触发解题分析。',
             bullets=[f'语言：{language}', '先写出主思路，再检查复杂度。'],
@@ -79,6 +86,8 @@ class FakeAnalysisService:
             provider=settings.provider,
             model=settings.attribution_model,
             endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
             title='错误归因',
             summary=f'提交 {submission.id} 已关联到题目 {problem.id}。',
             bullets=['优先检查 failed case。'],
@@ -92,6 +101,8 @@ class FakeAnalysisService:
             provider=settings.provider,
             model=settings.review_model,
             endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
             title='训练复盘',
             summary='已生成训练复盘建议。',
             bullets=['整理本题思路卡片。'],
@@ -101,14 +112,14 @@ class FakeAnalysisService:
 
 
 def main() -> int:
-    database = TemporaryDatabase()
+    reset_test_database()
     try:
-        problem_repository = ProblemRepository(database.database_url)
-        submission_repository = SubmissionRepository(database.database_url, 'https://judge0.example.com')
+        problem_repository = ProblemRepository(TEST_DATABASE_URL)
+        submission_repository = SubmissionRepository(TEST_DATABASE_URL, 'https://judge0.example.com')
         submission_repository.judge_service = FakeJudgeService()
-        settings_repository = LLMSettingsRepository(database.database_url)
-        review_repository = ReviewRepository(database.database_url)
-        training_repository = TrainingRepository(database.database_url)
+        settings_repository = LLMSettingsRepository(TEST_DATABASE_URL)
+        review_repository = ReviewRepository(TEST_DATABASE_URL)
+        training_repository = TrainingRepository(TEST_DATABASE_URL)
         analysis_service = FakeAnalysisService()
 
         problem = asyncio.run(get_problem(1, repository=problem_repository))
@@ -174,7 +185,7 @@ def main() -> int:
         print('E2E smoke passed: open problem, submit code, trigger AI, browse review/training.')
         return 0
     finally:
-        database.close()
+        pass
 
 
 if __name__ == '__main__':

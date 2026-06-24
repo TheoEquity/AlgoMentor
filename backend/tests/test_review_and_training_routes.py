@@ -14,17 +14,16 @@ from api.routes.review import list_reviews
 from api.routes.training import get_training_overview
 from repositories.review_repository import ReviewRepository
 from repositories.training_repository import TrainingRepository
-from tests.test_support import TemporaryDatabase, insert_submission
+from tests.test_support import TEST_DATABASE_URL, insert_submission, reset_test_database
 
 
 class ReviewAndTrainingRouteTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.database = TemporaryDatabase()
-        self.review_repository = ReviewRepository(self.database.database_url)
-        self.training_repository = TrainingRepository(self.database.database_url)
+        reset_test_database()
+        self.review_repository = ReviewRepository(TEST_DATABASE_URL)
+        self.training_repository = TrainingRepository(TEST_DATABASE_URL)
 
         insert_submission(
-            self.database.database_url,
             problem_id=1,
             language='Python',
             run_type='submit',
@@ -35,7 +34,6 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
             failed_actual_output='8\n',
         )
         insert_submission(
-            self.database.database_url,
             problem_id=1,
             language='Python',
             run_type='submit',
@@ -43,7 +41,6 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
             created_at='2026-06-23T10:00:00Z',
         )
         insert_submission(
-            self.database.database_url,
             problem_id=2,
             language='Java',
             run_type='run',
@@ -51,9 +48,6 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
             created_at='2026-06-23T11:00:00Z',
             failed_input='(()\n',
         )
-
-    def tearDown(self) -> None:
-        self.database.close()
 
     def test_review_route_filters_wrong_submissions_and_company(self) -> None:
         payload = asyncio.run(

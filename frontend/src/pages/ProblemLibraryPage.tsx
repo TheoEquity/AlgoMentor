@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { createProblem, listProblems } from '../lib/problemApi'
+import { listCategories } from '../lib/categoryApi'
+import { listCompanies } from '../lib/companyApi'
+import type { ProblemCategory } from '../types/problemCategory'
+import type { Company } from '../types/company'
 import type { ProblemCreatePayload, ProblemListItem } from '../types/problem'
 
 type ProblemLibraryPageProps = {
@@ -9,9 +13,11 @@ type ProblemLibraryPageProps = {
 
 export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
   const [problems, setProblems] = useState<ProblemListItem[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [categories, setCategories] = useState<ProblemCategory[]>([])
   const [searchText, setSearchText] = useState('')
   const [company, setCompany] = useState('all')
-  const [department, setDepartment] = useState('all')
+  const [categorySlug, setCategorySlug] = useState('all')
   const [difficulty, setDifficulty] = useState('all')
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -21,7 +27,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
     slug: '',
     title: '',
     company: '',
-    department: '',
+    category_slug: '',
     difficulty: 'Medium' as 'Easy' | 'Medium' | 'Hard',
     statement_markdown: '',
     constraints_text: '',
@@ -40,7 +46,11 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
   })
 
   useEffect(() => {
-    void listProblems().then(setProblems)
+    void Promise.all([
+      listProblems().then(setProblems),
+      listCompanies().then(setCompanies).catch(() => {}),
+      listCategories().then(setCategories).catch(() => {}),
+    ])
   }, [])
 
   const handleCreateField = (field: keyof typeof form, value: string) => {
@@ -55,7 +65,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       slug: '',
       title: '',
       company: '',
-      department: '',
+      category_slug: '',
       difficulty: 'Medium',
       statement_markdown: '',
       constraints_text: '',
@@ -88,7 +98,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       slug: form.slug.trim(),
       title: form.title.trim(),
       company: form.company.trim(),
-      department: form.department.trim(),
+      category_slug: form.category_slug.trim(),
       difficulty: form.difficulty,
       statement_markdown: form.statement_markdown.trim(),
       constraints_text: form.constraints_text.trim(),
@@ -148,15 +158,15 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
         problem.tags.some((tag) => tag.includes(searchText))
 
       const matchesCompany = company === 'all' || problem.company === company
-      const matchesDepartment = department === 'all' || problem.department === department
+      const matchesCategory = categorySlug === 'all' || problem.category_slug === categorySlug
       const matchesDifficulty = difficulty === 'all' || problem.difficulty === difficulty
 
-      return matchesSearch && matchesCompany && matchesDepartment && matchesDifficulty
+      return matchesSearch && matchesCompany && matchesCategory && matchesDifficulty
     })
-  }, [company, department, difficulty, problems, searchText])
+  }, [company, categorySlug, difficulty, problems, searchText])
 
-  const companies = Array.from(new Set(problems.map((problem) => problem.company)))
-  const departments = Array.from(new Set(problems.map((problem) => problem.department)))
+  const companyNames = Array.from(new Set(problems.map((problem) => problem.company)))
+  const categoryNames: { slug: string; name: string }[] = categories.map((c) => ({ slug: c.slug, name: c.name }))
 
   return (
     <section>
@@ -187,7 +197,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
           <label className="filter-control">
             <select value={company} onChange={(event) => setCompany(event.target.value)}>
               <option value="all">全部公司</option>
-              {companies.map((item) => (
+              {companyNames.map((item) => (
                 <option key={item} value={item}>
                   {item}
                 </option>
@@ -196,11 +206,11 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
           </label>
 
           <label className="filter-control">
-            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
-              <option value="all">全部部门</option>
-              {departments.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+            <select value={categorySlug} onChange={(event) => setCategorySlug(event.target.value)}>
+              <option value="all">全部题型</option>
+              {categoryNames.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -241,7 +251,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               onClick={() => {
                 setSearchText('')
                 setCompany('all')
-                setDepartment('all')
+                setCategorySlug('all')
                 setDifficulty('all')
               }}
             >
@@ -287,8 +297,8 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               <input value={form.company} onChange={(event) => handleCreateField('company', event.target.value)} />
             </label>
             <label className="settings-field">
-              <span>部门</span>
-              <input value={form.department} onChange={(event) => handleCreateField('department', event.target.value)} />
+              <span>题型 Slug</span>
+              <input value={form.category_slug} onChange={(event) => handleCreateField('category_slug', event.target.value)} placeholder="two-pointers" />
             </label>
             <label className="settings-field">
               <span>难度</span>
@@ -408,7 +418,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               <tr>
                 <th>题目</th>
                 <th>公司</th>
-                <th>部门</th>
+                <th>题型</th>
                 <th>难度</th>
                 <th>标签</th>
                 <th>最近状态</th>
@@ -430,7 +440,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
                     </div>
                   </td>
                   <td>{problem.company}</td>
-                  <td>{problem.department}</td>
+                  <td>{problem.category_slug || '-'}</td>
                   <td>{problem.difficulty}</td>
                   <td>
                     <div className="tag-list">

@@ -26,44 +26,35 @@ class ReviewRepository:
         if wrong_only:
             where_clauses.append("s.verdict != 'AC'")
         if company:
-            where_clauses.append('p.company = ?')
+            where_clauses.append('p.company = %s')
             params.append(company)
         if tag:
-            where_clauses.append('(p.tags_json LIKE ? OR p.tags_json LIKE ?)')
-            params.append(f'%"{tag}"%')
-            params.append(f'%{json.dumps(tag)}%')
+            escaped_tag = json.dumps(tag).replace('\\', '\\\\')
+            where_clauses.append('(p.tags_json LIKE %s OR p.tags_json LIKE %s)')
+            params.append(f'%{tag}%')
+            params.append(f'%{escaped_tag}%')
         if error_type:
-            where_clauses.append('s.verdict = ?')
+            where_clauses.append('s.verdict = %s')
             params.append(error_type)
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ''
-        rows = connection.execute(
-            f'''
-            SELECT
-                s.id AS submission_id,
-                s.problem_id,
-                s.language,
-                s.run_type,
-                s.verdict,
-                s.runtime_ms,
-                s.memory_kb,
-                s.failed_input,
-                s.failed_expected_output,
-                s.failed_actual_output,
-                s.created_at,
-                p.title,
-                p.company,
-                p.department,
-                p.difficulty,
-                p.tags_json
-            FROM submissions s
-            INNER JOIN problems p ON p.id = s.problem_id
-            {where_sql}
-            ORDER BY s.created_at DESC, s.id DESC
-            LIMIT 100
-            ''',
-            tuple(params),
-        ).fetchall()
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                f'''
+                SELECT
+                    s.id AS submission_id, s.problem_id, s.language, s.run_type, s.verdict,
+                    s.runtime_ms, s.memory_kb, s.failed_input, s.failed_expected_output,
+                    s.failed_actual_output, s.created_at,
+                    p.title, p.company, p.difficulty, p.category_slug, p.tags_json
+                FROM submissions s
+                INNER JOIN problems p ON p.id = s.problem_id
+                {where_sql}
+                ORDER BY s.created_at DESC, s.id DESC
+                LIMIT 100
+                ''',
+                tuple(params),
+            )
+            rows = cursor.fetchall()
         connection.close()
 
         items = [self._build_item(row) for row in rows]
@@ -76,15 +67,16 @@ class ReviewRepository:
         )
         return ReviewListResponse(summary=summary, items=items)
 
-    def _build_item(self, row) -> ReviewListItem:
+    @staticmethod
+    def _build_item(row: dict) -> ReviewListItem:
         tags = json.loads(row['tags_json'])
         return ReviewListItem(
             submission_id=row['submission_id'],
             problem_id=row['problem_id'],
             title=row['title'],
             company=row['company'],
-            department=row['department'],
             difficulty=row['difficulty'],
+            category_slug=row['category_slug'],
             tags=tags,
             language=row['language'],
             run_type=row['run_type'],
@@ -92,11 +84,12 @@ class ReviewRepository:
             error_type=row['verdict'],
             runtime_ms=row['runtime_ms'],
             memory_kb=row['memory_kb'],
-            failed_case_summary=self._build_failed_case_summary(row),
+            failed_case_summary=ReviewRepository._build_failed_case_summary(row),
             created_at=row['created_at'],
         )
 
-    def _build_failed_case_summary(self, row) -> str:
+    @staticmethod
+    def _build_failed_case_summary(row: dict) -> str:
         if row['verdict'] == 'AC':
             return '本次提交通过，可直接进入复盘提炼思路。'
 

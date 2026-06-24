@@ -23,8 +23,8 @@ class JudgeServiceTests(unittest.TestCase):
             slug='test-problem',
             title='Test Problem',
             company='ByteDance',
-            department='Infra',
             difficulty='Medium',
+            category_slug='two-pointers',
             tags=['array'],
             supported_languages=['Python', 'C++', 'Java'],
             status='published',
@@ -68,7 +68,7 @@ class JudgeServiceTests(unittest.TestCase):
         )
 
     def _assert_verdict(self, language: str, judge0_result: dict, expected_verdict: str) -> None:
-        with patch.object(self.service, '_create_submission_and_wait', return_value=judge0_result):
+        with patch.object(self.service, '_create_submission_and_wait', return_value=(judge0_result, None)):
             result = self.service.evaluate(
                 self.problem,
                 self._payload(language),
@@ -100,15 +100,18 @@ class JudgeServiceTests(unittest.TestCase):
         with patch.object(
             self.service,
             '_create_submission_and_wait',
-            return_value={
-                'status': {'id': 4, 'description': 'Wrong Answer'},
-                'stdout': '0\n',
-                'stderr': '',
-                'compile_output': '',
-                'message': '',
-                'time': '0.022',
-                'memory': 3072,
-            },
+            return_value=(
+                {
+                    'status': {'id': 4, 'description': 'Wrong Answer'},
+                    'stdout': '0\n',
+                    'stderr': '',
+                    'compile_output': '',
+                    'message': '',
+                    'time': '0.022',
+                    'memory': 3072,
+                },
+                None,
+            ),
         ):
             result = self.service.evaluate(
                 self.problem,
@@ -126,15 +129,18 @@ class JudgeServiceTests(unittest.TestCase):
         with patch.object(
             self.service,
             '_create_submission_and_wait',
-            return_value={
-                'status': {'id': 6, 'description': 'Compilation Error'},
-                'stdout': '',
-                'stderr': '',
-                'compile_output': 'main.cpp:1: error: expected ;',
-                'message': '',
-                'time': None,
-                'memory': None,
-            },
+            return_value=(
+                {
+                    'status': {'id': 6, 'description': 'Compilation Error'},
+                    'stdout': '',
+                    'stderr': '',
+                    'compile_output': 'main.cpp:1: error: expected ;',
+                    'message': '',
+                    'time': None,
+                    'memory': None,
+                },
+                None,
+            ),
         ):
             result = self.service.evaluate(
                 self.problem,
@@ -150,15 +156,18 @@ class JudgeServiceTests(unittest.TestCase):
         with patch.object(
             self.service,
             '_create_submission_and_wait',
-            return_value={
-                'status': {'id': 7, 'description': 'Runtime Error (NZEC)'},
-                'stdout': '',
-                'stderr': 'Segmentation fault',
-                'compile_output': '',
-                'message': '',
-                'time': '0.015',
-                'memory': 4096,
-            },
+            return_value=(
+                {
+                    'status': {'id': 7, 'description': 'Runtime Error (NZEC)'},
+                    'stdout': '',
+                    'stderr': 'Segmentation fault',
+                    'compile_output': '',
+                    'message': '',
+                    'time': '0.015',
+                    'memory': 4096,
+                },
+                None,
+            ),
         ):
             result = self.service.evaluate(
                 self.problem,

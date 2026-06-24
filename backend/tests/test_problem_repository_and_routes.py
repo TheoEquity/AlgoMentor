@@ -13,27 +13,24 @@ if str(SRC_DIR) not in sys.path:
 from api.routes.problems import create_problem, get_problem, list_problems
 from repositories.problem_repository import ProblemRepository
 from schemas.problems import ExampleItem, ProblemCreate, ProblemTestCase
-from tests.test_support import TemporaryDatabase
+from tests.test_support import TEST_DATABASE_URL, reset_test_database
 
 
 class ProblemRepositoryAndRouteTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.database = TemporaryDatabase()
-        self.repository = ProblemRepository(self.database.database_url)
+        reset_test_database()
+        self.repository = ProblemRepository(TEST_DATABASE_URL)
 
-    def tearDown(self) -> None:
-        self.database.close()
-
-    def test_list_problems_filters_by_company_department_difficulty_and_tag(self) -> None:
-        by_company = self.repository.list_problems(company='字节跳动', department=None, difficulty=None, tag=None)
-        by_department = self.repository.list_problems(company=None, department='微信后台', difficulty=None, tag=None)
-        by_difficulty = self.repository.list_problems(company=None, department=None, difficulty='Easy', tag=None)
-        by_tag = self.repository.list_problems(company=None, department=None, difficulty=None, tag='栈')
+    def test_list_problems_filters_by_company_category_and_difficulty_and_tag(self) -> None:
+        by_company = self.repository.list_problems(company='字节跳动', department=None, difficulty=None, category_slug=None, tag=None)
+        by_category = self.repository.list_problems(company=None, department=None, difficulty=None, category_slug='stack-queue', tag=None)
+        by_difficulty = self.repository.list_problems(company=None, department=None, difficulty='Easy', category_slug=None, tag=None)
+        by_tag = self.repository.list_problems(company=None, department=None, difficulty=None, category_slug=None, tag='栈')
 
         self.assertEqual(len(by_company), 1)
         self.assertEqual(by_company[0].company, '字节跳动')
-        self.assertEqual(len(by_department), 1)
-        self.assertEqual(by_department[0].department, '微信后台')
+        self.assertEqual(len(by_category), 1)
+        self.assertEqual(by_category[0].category_slug, 'stack-queue')
         self.assertEqual(len(by_difficulty), 1)
         self.assertEqual(by_difficulty[0].difficulty, 'Easy')
         self.assertEqual(len(by_tag), 1)
@@ -44,8 +41,8 @@ class ProblemRepositoryAndRouteTests(unittest.TestCase):
             slug='manual-two-sum-variant',
             title='双指针变体求和',
             company='美团',
-            department='到店事业群',
             difficulty='Medium',
+            category_slug='two-pointers',
             statement_markdown='给定一个有序数组，找到满足条件的两个数。',
             constraints_text='2 <= n <= 10^5',
             tags=['双指针', '数组'],
@@ -80,8 +77,8 @@ class ProblemRepositoryAndRouteTests(unittest.TestCase):
                     slug='route-created-problem',
                     title='区间求和校验',
                     company='阿里巴巴',
-                    department='淘天技术',
                     difficulty='Easy',
+                    category_slug='prefix-sum',
                     statement_markdown='给定数组和多个查询，输出每个区间和。',
                     constraints_text='1 <= n <= 10^5',
                     tags=['前缀和'],
@@ -96,7 +93,7 @@ class ProblemRepositoryAndRouteTests(unittest.TestCase):
             )
         )
         listing = asyncio.run(
-            list_problems(company='阿里巴巴', department=None, difficulty=None, tag=None, repository=self.repository)
+            list_problems(company='阿里巴巴', difficulty=None, category_slug=None, tag=None, repository=self.repository)
         )
         detail = asyncio.run(get_problem(created.id, repository=self.repository))
 

@@ -174,3 +174,4 @@
 *.lz
 *.lzma
 *.iso
+backend/src/bytehunter.db

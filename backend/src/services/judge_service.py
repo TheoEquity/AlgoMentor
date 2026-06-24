@@ -25,6 +25,7 @@ class Judge0CaseOutcome:
     actual_output: str = ''
     runtime_ms: int = 0
     memory_kb: int = 0
+    judge_token: str | None = None
 
 
 class JudgeService:
@@ -45,9 +46,13 @@ class JudgeService:
         failed_expected_output: str | None = None
         failed_actual_output: str | None = None
         verdict = 'AC'
+        judge_token: str | None = None
 
         for index, case in enumerate(visible_cases, start=1):
             outcome = self._run_case(problem, payload, normalized_code, case.stdin_text, case.expected_output_text)
+
+            if judge_token is None and outcome.judge_token:
+                judge_token = outcome.judge_token
 
             if outcome.verdict != 'AC' and verdict == 'AC':
                 verdict = outcome.verdict
@@ -91,6 +96,7 @@ class JudgeService:
 
         return SubmissionResult(
             id=submission_id,
+            user_id=1,
             problem_id=problem.id,
             language=payload.language,
             run_type=payload.run_type,
@@ -105,6 +111,7 @@ class JudgeService:
             failed_expected_output=failed_expected_output,
             failed_actual_output=failed_actual_output,
             case_results=case_results,
+            judge_token=judge_token,
             created_at=created_at,
         )
 
@@ -131,7 +138,7 @@ class JudgeService:
 
     def _judge0_case(self, payload: SubmissionCreate, stdin_text: str, expected_output: str) -> Judge0CaseOutcome:
         language_id = self._language_id(payload.language)
-        result = self._create_submission_and_wait(
+        raw_response, token = self._create_submission_and_wait(
             {
                 'language_id': language_id,
                 'source_code': payload.code_text,
@@ -139,16 +146,18 @@ class JudgeService:
                 'expected_output': expected_output,
             }
         )
-        return self._normalize_judge0_result(result)
+        outcome = self._normalize_judge0_result(raw_response)
+        outcome.judge_token = token
+        return outcome
 
-    def _create_submission_and_wait(self, payload: dict) -> dict:
+    def _create_submission_and_wait(self, payload: dict) -> tuple[dict, str | None]:
         query = parse.urlencode({'wait': 'true'})
         response = self._post_json(f'{self.judge0_url}/submissions?{query}', payload)
         status_id = int(response.get('status', {}).get('id', 0))
         token = response.get('token')
         if status_id in {1, 2} and token:
-            return self._poll_submission(token)
-        return response
+            return self._poll_submission(token), token
+        return response, token
 
     def _poll_submission(self, token: str) -> dict:
         fields = 'stdout,stderr,compile_output,message,status,time,memory,token'

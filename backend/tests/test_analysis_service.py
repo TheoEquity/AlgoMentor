@@ -42,8 +42,8 @@ class AnalysisServiceTests(unittest.TestCase):
             slug='array-partition-max-gap',
             title='数组划分后的最大差值',
             company='字节跳动',
-            department='广告算法',
             difficulty='Medium',
+            category_slug='greedy',
             tags=['数组', '前后缀'],
             supported_languages=['Python', 'C++', 'Java'],
             status='published',
@@ -58,6 +58,7 @@ class AnalysisServiceTests(unittest.TestCase):
         )
         self.submission = SubmissionResult(
             id=11,
+            user_id=1,
             problem_id=1,
             language='Python',
             run_type='submit',
@@ -84,6 +85,7 @@ class AnalysisServiceTests(unittest.TestCase):
                     stderr_output='',
                 )
             ],
+            judge_token=None,
             created_at='2026-06-24T00:00:00Z',
         )
 

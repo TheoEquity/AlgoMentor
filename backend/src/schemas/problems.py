@@ -24,8 +24,8 @@ class ProblemBase(BaseModel):
     slug: str = Field(min_length=3)
     title: str = Field(min_length=2)
     company: str = Field(min_length=2)
-    department: str = Field(min_length=2)
     difficulty: Literal['Easy', 'Medium', 'Hard']
+    category_slug: str = Field(default='')
     statement_markdown: str = Field(min_length=10)
     constraints_text: str = Field(min_length=5)
     tags: list[str] = Field(min_length=1)
@@ -47,8 +47,8 @@ class ProblemListItem(BaseModel):
     slug: str
     title: str
     company: str
-    department: str
     difficulty: str
+    category_slug: str
     tags: list[str]
     supported_languages: list[str]
     status: str

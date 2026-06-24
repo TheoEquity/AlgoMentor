@@ -234,7 +234,7 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
                             <strong>{item.title}</strong>
                             <div className="review-problem-meta">
                               <span>{item.company}</span>
-                              <span>{item.department}</span>
+                              <span>{item.category_slug}</span>
                               <span>{item.difficulty}</span>
                             </div>
                           </div>

@@ -123,8 +123,8 @@ class AnalysisRouteTests(unittest.TestCase):
             slug='array-partition-max-gap',
             title='数组划分后的最大差值',
             company='字节跳动',
-            department='广告算法',
             difficulty='Medium',
+            category_slug='greedy',
             tags=['数组', '前后缀'],
             supported_languages=['Python', 'C++', 'Java'],
             status='published',
@@ -139,6 +139,7 @@ class AnalysisRouteTests(unittest.TestCase):
         )
         self.submission = SubmissionResult(
             id=42,
+            user_id=1,
             problem_id=1,
             language='Python',
             run_type='submit',
@@ -165,6 +166,7 @@ class AnalysisRouteTests(unittest.TestCase):
                     stderr_output='IndexError on line 7',
                 )
             ],
+            judge_token=None,
             created_at='2026-06-24T00:00:00Z',
         )
         self.settings_repository = FakeSettingsRepository()

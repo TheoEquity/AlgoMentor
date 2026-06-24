@@ -16,15 +16,16 @@ def get_repository() -> ProblemRepository:
 @router.get('', response_model=list[ProblemListItem])
 async def list_problems(
     company: str | None = Query(default=None),
-    department: str | None = Query(default=None),
     difficulty: str | None = Query(default=None),
+    category_slug: str | None = Query(default=None),
     tag: str | None = Query(default=None),
     repository: ProblemRepository = Depends(get_repository),
 ) -> list[ProblemListItem]:
     return repository.list_problems(
         company=company,
-        department=department,
+        department=None,
         difficulty=difficulty,
+        category_slug=category_slug,
         tag=tag,
     )
 

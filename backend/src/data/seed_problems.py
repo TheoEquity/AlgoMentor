@@ -8,8 +8,8 @@ SEED_PROBLEMS = [
         'slug': 'array-partition-max-gap',
         'title': '数组划分后的最大差值',
         'company': '字节跳动',
-        'department': '广告算法',
         'difficulty': 'Medium',
+        'category_slug': 'greedy',
         'statement_markdown': (
             '给定一个长度为 n 的整数数组，请将数组划分为左右两个非空部分，'
             '使左右部分最大值差的绝对值最大。输出这个最大差值。'
@@ -58,8 +58,8 @@ SEED_PROBLEMS = [
         'slug': 'parentheses-min-fix',
         'title': '括号序列的最短修复',
         'company': '腾讯',
-        'department': '微信后台',
         'difficulty': 'Easy',
+        'category_slug': 'stack-queue',
         'statement_markdown': '给定一个只包含 `(` 和 `)` 的字符串，求最少插入多少个括号能使其合法。',
         'constraints_text': '1 <= len(s) <= 10^5',
         'tags_json': json.dumps(['栈', '字符串']),

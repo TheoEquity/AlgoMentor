@@ -19,43 +19,35 @@ class TrainingRepository:
 
     def get_overview(self) -> TrainingOverviewResponse:
         connection = get_connection(self.database_url)
-        recent_rows = connection.execute(
-            '''
-            SELECT
-                s.id AS submission_id,
-                s.problem_id,
-                s.language,
-                s.run_type,
-                s.verdict,
-                s.created_at,
-                p.title,
-                p.company,
-                p.tags_json
-            FROM submissions s
-            INNER JOIN problems p ON p.id = s.problem_id
-            ORDER BY s.created_at DESC, s.id DESC
-            LIMIT 20
-            '''
-        ).fetchall()
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                SELECT
+                    s.id AS submission_id, s.problem_id, s.language, s.run_type, s.verdict,
+                    s.created_at, p.title, p.company, p.tags_json
+                FROM submissions s
+                INNER JOIN problems p ON p.id = s.problem_id
+                ORDER BY s.created_at DESC, s.id DESC
+                LIMIT 20
+                '''
+            )
+            recent_rows = cursor.fetchall()
 
-        recommendation_rows = connection.execute(
-            '''
-            SELECT
-                p.id,
-                p.title,
-                p.company,
-                p.tags_json,
-                p.updated_at,
-                COALESCE(MAX(s.created_at), '') AS last_submission_at,
-                SUM(CASE WHEN s.verdict = 'AC' THEN 1 ELSE 0 END) AS ac_count,
-                SUM(CASE WHEN s.verdict != 'AC' THEN 1 ELSE 0 END) AS wrong_count
-            FROM problems p
-            LEFT JOIN submissions s ON s.problem_id = p.id
-            GROUP BY p.id, p.title, p.company, p.tags_json, p.updated_at
-            ORDER BY wrong_count DESC, last_submission_at DESC, p.updated_at DESC
-            LIMIT 6
-            '''
-        ).fetchall()
+            cursor.execute(
+                '''
+                SELECT
+                    p.id, p.title, p.company, p.tags_json, p.updated_at,
+                    COALESCE(MAX(s.created_at), '') AS last_submission_at,
+                    COALESCE(SUM(CASE WHEN s.verdict = 'AC' THEN 1 ELSE 0 END), 0) AS ac_count,
+                    COALESCE(SUM(CASE WHEN s.verdict != 'AC' THEN 1 ELSE 0 END), 0) AS wrong_count
+                FROM problems p
+                LEFT JOIN submissions s ON s.problem_id = p.id
+                GROUP BY p.id, p.title, p.company, p.tags_json, p.updated_at
+                ORDER BY wrong_count DESC, last_submission_at DESC, p.updated_at DESC
+                LIMIT 6
+                '''
+            )
+            recommendation_rows = cursor.fetchall()
         connection.close()
 
         recent_items = [
@@ -102,14 +94,16 @@ class TrainingRepository:
             recommendations=recommendations,
         )
 
-    def _most_common_error(self, verdict_counter: Counter[str]):
+    @staticmethod
+    def _most_common_error(verdict_counter: Counter[str]) -> str | None:
         error_items = [(verdict, count) for verdict, count in verdict_counter.items() if verdict != 'AC']
         if not error_items:
             return None
         error_items.sort(key=lambda item: item[1], reverse=True)
         return error_items[0][0]
 
-    def _build_recommendation(self, row) -> TrainingRecommendation:
+    @staticmethod
+    def _build_recommendation(row: dict) -> TrainingRecommendation:
         tags = json.loads(row['tags_json'])
         wrong_count = row['wrong_count'] or 0
         ac_count = row['ac_count'] or 0

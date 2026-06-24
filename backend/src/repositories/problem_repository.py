@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from sqlite3 import Row
-from typing import Any
 
 from core.db import get_connection
 from schemas.problems import ExampleItem, ProblemCreate, ProblemDetail, ProblemListItem, ProblemTestCase
@@ -19,76 +17,78 @@ class ProblemRepository:
         company: str | None,
         department: str | None,
         difficulty: str | None,
+        category_slug: str | None,
         tag: str | None,
     ) -> list[ProblemListItem]:
         query = '''
             SELECT * FROM problems
-            WHERE (? IS NULL OR company = ?)
-              AND (? IS NULL OR department = ?)
-              AND (? IS NULL OR difficulty = ?)
-              AND (? IS NULL OR tags_json LIKE ? OR tags_json LIKE ?)
+            WHERE (%s IS NULL OR company = %s)
+              AND (%s IS NULL OR difficulty = %s)
+              AND (%s IS NULL OR category_slug = %s)
+              AND (%s IS NULL OR tags_json LIKE %s OR tags_json LIKE %s)
             ORDER BY updated_at DESC, id DESC
         '''
         tag_like = f'%{tag}%' if tag else None
-        tag_json_like = f'%{json.dumps(tag)}%' if tag else None
+        escaped_tag = json.dumps(tag).replace('\\', '\\\\') if tag else None
+        tag_json_like = f'%{escaped_tag}%' if escaped_tag else None
 
         connection = get_connection(self.database_url)
-        rows = connection.execute(
-            query,
-            (company, company, department, department, difficulty, difficulty, tag, tag_like, tag_json_like),
-        ).fetchall()
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                query,
+                (
+                    company, company,
+                    difficulty, difficulty,
+                    category_slug, category_slug,
+                    tag, tag_like, tag_json_like,
+                ),
+            )
+            rows = cursor.fetchall()
         connection.close()
 
         return [self._list_item_from_row(row) for row in rows]
 
     def get_problem(self, problem_id: int) -> ProblemDetail | None:
         connection = get_connection(self.database_url)
-        row = connection.execute('SELECT * FROM problems WHERE id = ?', (problem_id,)).fetchone()
-        if row is None:
+        try:
+            with connection, connection.cursor() as cursor:
+                cursor.execute('SELECT * FROM problems WHERE id = %s', (problem_id,))
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+
+                cursor.execute(
+                    'SELECT * FROM problem_test_cases WHERE problem_id = %s ORDER BY sort_order ASC',
+                    (problem_id,),
+                )
+                test_case_rows = cursor.fetchall()
+
+            return self._detail_from_row(row, test_case_rows)
+        finally:
             connection.close()
-            return None
-
-        test_case_rows = connection.execute(
-            'SELECT * FROM problem_test_cases WHERE problem_id = ? ORDER BY sort_order ASC',
-            (problem_id,),
-        ).fetchall()
-        connection.close()
-
-        return self._detail_from_row(row, test_case_rows)
 
     def create_problem(self, payload: ProblemCreate) -> ProblemDetail:
         now = datetime.now(UTC).isoformat()
         connection = get_connection(self.database_url)
 
-        with connection:
-            cursor = connection.execute(
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
                 '''
                 INSERT INTO problems (
-                    slug,
-                    title,
-                    company,
-                    department,
-                    difficulty,
-                    statement_markdown,
-                    constraints_text,
-                    tags_json,
-                    examples_json,
-                    supported_languages_json,
-                    starter_templates_json,
-                    source_type,
-                    source_ref,
-                    external_id,
-                    status,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    slug, title, company, difficulty, category_slug,
+                    statement_markdown, constraints_text, tags_json,
+                    examples_json, supported_languages_json, starter_templates_json,
+                    source_type, source_ref, external_id,
+                    status, created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 ''',
                 (
                     payload.slug,
                     payload.title,
                     payload.company,
-                    payload.department,
                     payload.difficulty,
+                    payload.category_slug,
                     payload.statement_markdown,
                     payload.constraints_text,
                     json.dumps(payload.tags),
@@ -103,18 +103,14 @@ class ProblemRepository:
                     now,
                 ),
             )
-            problem_id = cursor.lastrowid
+            problem_id = cursor.fetchone()['id']
 
             for test_case in payload.test_cases:
-                connection.execute(
+                cursor.execute(
                     '''
                     INSERT INTO problem_test_cases (
-                        problem_id,
-                        case_type,
-                        stdin_text,
-                        expected_output_text,
-                        sort_order
-                    ) VALUES (?, ?, ?, ?, ?)
+                        problem_id, case_type, stdin_text, expected_output_text, sort_order
+                    ) VALUES (%s, %s, %s, %s, %s)
                     ''',
                     (
                         problem_id,
@@ -133,28 +129,30 @@ class ProblemRepository:
 
         return created_problem
 
-    def _list_item_from_row(self, row: Row) -> ProblemListItem:
+    @staticmethod
+    def _list_item_from_row(row: dict) -> ProblemListItem:
         return ProblemListItem(
             id=row['id'],
             slug=row['slug'],
             title=row['title'],
             company=row['company'],
-            department=row['department'],
             difficulty=row['difficulty'],
+            category_slug=row['category_slug'],
             tags=json.loads(row['tags_json']),
             supported_languages=json.loads(row['supported_languages_json']),
             status=row['status'],
             updated_at=row['updated_at'],
         )
 
-    def _detail_from_row(self, row: Row, test_case_rows: list[Row]) -> ProblemDetail:
+    @staticmethod
+    def _detail_from_row(row: dict, test_case_rows: list[dict]) -> ProblemDetail:
         return ProblemDetail(
             id=row['id'],
             slug=row['slug'],
             title=row['title'],
             company=row['company'],
-            department=row['department'],
             difficulty=row['difficulty'],
+            category_slug=row['category_slug'],
             statement_markdown=row['statement_markdown'],
             constraints_text=row['constraints_text'],
             tags=json.loads(row['tags_json']),
@@ -166,10 +164,11 @@ class ProblemRepository:
             external_id=row['external_id'],
             status=row['status'],
             updated_at=row['updated_at'],
-            test_cases=[self._test_case_from_row(test_case_row) for test_case_row in test_case_rows],
+            test_cases=[ProblemRepository._test_case_from_row(tcr) for tcr in test_case_rows],
         )
 
-    def _test_case_from_row(self, row: Row) -> ProblemTestCase:
+    @staticmethod
+    def _test_case_from_row(row: dict) -> ProblemTestCase:
         return ProblemTestCase(
             case_type=row['case_type'],
             stdin_text=row['stdin_text'],

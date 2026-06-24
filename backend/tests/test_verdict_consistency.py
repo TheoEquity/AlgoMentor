@@ -13,13 +13,14 @@ from repositories.review_repository import ReviewRepository
 from repositories.submission_repository import SubmissionRepository
 from repositories.training_repository import TrainingRepository
 from schemas.submissions import SubmissionCaseResult, SubmissionCreate, SubmissionResult
-from tests.test_support import TemporaryDatabase
+from tests.test_support import TEST_DATABASE_URL, reset_test_database
 
 
 class FakeJudgeService:
     def evaluate(self, problem, payload, submission_id, created_at):
         return SubmissionResult(
             id=submission_id,
+            user_id=1,
             problem_id=problem.id,
             language=payload.language,
             run_type=payload.run_type,
@@ -46,20 +47,18 @@ class FakeJudgeService:
                     stderr_output='',
                 )
             ],
+            judge_token=None,
             created_at=created_at,
         )
 
 
 class VerdictConsistencyTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.database = TemporaryDatabase()
-        self.submission_repository = SubmissionRepository(self.database.database_url, 'https://judge0.example.com')
+        reset_test_database()
+        self.submission_repository = SubmissionRepository(TEST_DATABASE_URL, 'https://judge0.example.com')
         self.submission_repository.judge_service = FakeJudgeService()
-        self.review_repository = ReviewRepository(self.database.database_url)
-        self.training_repository = TrainingRepository(self.database.database_url)
-
-    def tearDown(self) -> None:
-        self.database.close()
+        self.review_repository = ReviewRepository(TEST_DATABASE_URL)
+        self.training_repository = TrainingRepository(TEST_DATABASE_URL)
 
     def test_review_and_training_use_same_normalized_verdict_runtime_memory(self) -> None:
         created = self.submission_repository.create_submission(

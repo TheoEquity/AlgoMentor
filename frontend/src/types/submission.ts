@@ -43,6 +43,7 @@ export type SubmissionCreatePayload = {
 
 export type SubmissionResult = {
   id: number
+  user_id: number
   problem_id: number
   language: 'Python' | 'C++' | 'Java'
   run_type: SubmissionRunType
@@ -57,6 +58,7 @@ export type SubmissionResult = {
   failed_expected_output: string | null
   failed_actual_output: string | null
   case_results: SubmissionCaseResult[]
+  judge_token: string | null
   attribution_analysis: SubmissionAnalysisSnapshot | null
   review_analysis: SubmissionAnalysisSnapshot | null
   created_at: string

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from sqlite3 import Row
 
 from core.db import get_connection
 from schemas.llm_settings import LLMSettings, LLMSettingsUpdate
@@ -13,7 +12,9 @@ class LLMSettingsRepository:
 
     def get_settings(self) -> LLMSettings:
         connection = get_connection(self.database_url)
-        row = connection.execute('SELECT * FROM llm_settings WHERE id = 1').fetchone()
+        with connection, connection.cursor() as cursor:
+            cursor.execute('SELECT * FROM llm_settings WHERE id = 1')
+            row = cursor.fetchone()
         connection.close()
         if row is None:
             raise RuntimeError('LLM settings row not initialized')
@@ -24,7 +25,9 @@ class LLMSettingsRepository:
         updated_at = datetime.now(UTC).isoformat()
         connection = get_connection(self.database_url)
 
-        current_row = connection.execute('SELECT api_key_secret FROM llm_settings WHERE id = 1').fetchone()
+        with connection, connection.cursor() as cursor:
+            cursor.execute('SELECT api_key_secret FROM llm_settings WHERE id = 1')
+            current_row = cursor.fetchone()
         current_api_key = current_row['api_key_secret'] if current_row is not None else ''
         next_api_key = current_api_key
         if payload.clear_api_key:
@@ -32,21 +35,15 @@ class LLMSettingsRepository:
         elif payload.api_key is not None and payload.api_key != '':
             next_api_key = payload.api_key
 
-        with connection:
-            connection.execute(
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
                 '''
                 UPDATE llm_settings
-                SET provider = ?,
-                    endpoint_url = ?,
-                    solution_model = ?,
-                    attribution_model = ?,
-                    review_model = ?,
-                    solution_temperature = ?,
-                    attribution_temperature = ?,
-                    review_temperature = ?,
-                    api_key_secret = ?,
-                    enabled = ?,
-                    updated_at = ?
+                SET provider = %s, endpoint_url = %s,
+                    solution_model = %s, attribution_model = %s, review_model = %s,
+                    solution_temperature = %s, attribution_temperature = %s,
+                    review_temperature = %s, api_key_secret = %s,
+                    enabled = %s, updated_at = %s
                 WHERE id = 1
                 ''',
                 (
@@ -67,7 +64,7 @@ class LLMSettingsRepository:
         connection.close()
         return self.get_settings()
 
-    def _from_row(self, row: Row) -> LLMSettings:
+    def _from_row(self, row: dict) -> LLMSettings:
         return LLMSettings(
             id=row['id'],
             provider=row['provider'],
@@ -86,11 +83,14 @@ class LLMSettingsRepository:
 
     def get_api_key(self) -> str:
         connection = get_connection(self.database_url)
-        row = connection.execute('SELECT api_key_secret FROM llm_settings WHERE id = 1').fetchone()
+        with connection, connection.cursor() as cursor:
+            cursor.execute('SELECT api_key_secret FROM llm_settings WHERE id = 1')
+            row = cursor.fetchone()
         connection.close()
         return '' if row is None else row['api_key_secret'] or ''
 
-    def _mask_api_key(self, api_key: str) -> str:
+    @staticmethod
+    def _mask_api_key(api_key: str) -> str:
         if not api_key:
             return ''
         if len(api_key) <= 8:

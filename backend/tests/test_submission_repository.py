@@ -12,13 +12,14 @@ if str(SRC_DIR) not in sys.path:
 from repositories.submission_repository import SubmissionRepository
 from schemas.analysis import AnalysisLineRef, AnalysisResponse
 from schemas.submissions import SubmissionCaseResult, SubmissionCreate, SubmissionResult
-from tests.test_support import TemporaryDatabase
+from tests.test_support import TEST_DATABASE_URL, reset_test_database
 
 
 class FakeJudgeService:
     def evaluate(self, problem, payload, submission_id, created_at):
         return SubmissionResult(
             id=submission_id,
+            user_id=1,
             problem_id=problem.id,
             language=payload.language,
             run_type=payload.run_type,
@@ -45,18 +46,16 @@ class FakeJudgeService:
                     stderr_output='',
                 )
             ],
+            judge_token=None,
             created_at=created_at,
         )
 
 
 class SubmissionRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.database = TemporaryDatabase()
-        self.repository = SubmissionRepository(self.database.database_url, 'https://judge0.example.com')
+        reset_test_database()
+        self.repository = SubmissionRepository(TEST_DATABASE_URL, 'https://judge0.example.com')
         self.repository.judge_service = FakeJudgeService()
-
-    def tearDown(self) -> None:
-        self.database.close()
 
     def test_create_submission_persists_single_problem_and_language_binding(self) -> None:
         payload = SubmissionCreate(

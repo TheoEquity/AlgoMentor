@@ -12,8 +12,8 @@ export type ReviewItem = {
   problem_id: number
   title: string
   company: string
-  department: string
   difficulty: string
+  category_slug: string
   tags: string[]
   language: 'Python' | 'C++' | 'Java'
   run_type: 'run' | 'submit'

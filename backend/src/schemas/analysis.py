@@ -37,3 +37,22 @@ class AnalysisResponse(BaseModel):
     bullets: list[str]
     line_refs: list[AnalysisLineRef]
     verdict: Verdict | None = None
+
+
+class ErrorAttributionRecord(BaseModel):
+    id: int
+    submission_id: int
+    analysis_type: Literal['solution', 'attribution', 'review']
+    primary_category: str = ''
+    secondary_category: str = ''
+    summary: str = ''
+    suggestion: str = ''
+    bullets_json: str = '[]'
+    line_refs_json: str = '[]'
+    execution_status: Literal['completed', 'degraded'] = 'completed'
+    status_reason: str = ''
+    provider: str = ''
+    model: str = ''
+    endpoint_url: str = ''
+    raw_response_json: str = ''
+    created_at: str = ''

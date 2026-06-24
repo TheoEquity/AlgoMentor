@@ -3,8 +3,8 @@ export type ProblemListItem = {
   slug: string
   title: string
   company: string
-  department: string
   difficulty: string
+  category_slug: string
   tags: string[]
   supported_languages: string[]
   status: string
@@ -28,8 +28,8 @@ export type ProblemCreatePayload = {
   slug: string
   title: string
   company: string
-  department: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
+  category_slug: string
   statement_markdown: string
   constraints_text: string
   tags: string[]

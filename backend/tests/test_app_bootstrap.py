@@ -22,7 +22,7 @@ class AppBootstrapTests(unittest.TestCase):
 
         self.assertEqual(current.app_name, 'ByteHunter Backend')
         self.assertEqual(current.api_prefix, '/api/v1')
-        self.assertEqual(current.database_url, 'sqlite:///./bytehunter.db')
+        self.assertEqual(current.database_url, 'postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter')
         self.assertEqual(current.judge0_url, 'https://ce.judge0.com')
 
     def test_settings_can_be_overridden_by_environment(self) -> None:
@@ -31,7 +31,7 @@ class AppBootstrapTests(unittest.TestCase):
             {
                 'BYTEHUNTER_APP_NAME': 'Test Backend',
                 'BYTEHUNTER_API_PREFIX': '/test-api',
-                'BYTEHUNTER_DATABASE_URL': 'sqlite:////tmp/bytehunter-env-test.db',
+                'BYTEHUNTER_DATABASE_URL': 'postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter_env_test',
                 'BYTEHUNTER_JUDGE0_URL': 'https://judge0.example.com',
             },
             clear=False,
@@ -40,7 +40,7 @@ class AppBootstrapTests(unittest.TestCase):
 
         self.assertEqual(overridden.app_name, 'Test Backend')
         self.assertEqual(overridden.api_prefix, '/test-api')
-        self.assertEqual(overridden.database_url, 'sqlite:////tmp/bytehunter-env-test.db')
+        self.assertEqual(overridden.database_url, 'postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter_env_test')
         self.assertEqual(overridden.judge0_url, 'https://judge0.example.com')
 
     def test_lifespan_initializes_database_with_current_settings(self) -> None:
@@ -50,13 +50,13 @@ class AppBootstrapTests(unittest.TestCase):
 
         with patch('main.initialize_database') as mocked_initialize:
             original_database_url = settings.database_url
-            settings.database_url = 'sqlite:////tmp/bytehunter-lifespan-test.db'
+            settings.database_url = 'postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter_lifespan_test'
             try:
                 asyncio.run(run_lifespan())
             finally:
                 settings.database_url = original_database_url
 
-        mocked_initialize.assert_called_once_with('sqlite:////tmp/bytehunter-lifespan-test.db')
+        mocked_initialize.assert_called_once_with('postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter_lifespan_test')
 
     def test_healthz_returns_ok_status(self) -> None:
         payload = asyncio.run(healthz())

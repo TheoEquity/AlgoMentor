@@ -814,7 +814,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
           <div>
             <h1>{problem.title}</h1>
             <p>
-              {problem.company} / {problem.department} / {problem.difficulty}
+              {problem.company} / {problem.difficulty} / {problem.category_slug}
             </p>
           </div>
         </div>

@@ -1,47 +1,39 @@
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
+import psycopg2
+import psycopg2.extras
+from psycopg2.extensions import connection as PgConnection
 
 from data.seed_problems import SEED_PROBLEMS
 
 
-def _database_path(database_url: str) -> Path:
-    if not database_url.startswith('sqlite:///'):
-        raise ValueError('Current MVP database layer supports sqlite URLs only.')
-
-    raw_path = database_url.removeprefix('sqlite:///')
-    return Path(raw_path).resolve()
-
-
-def get_connection(database_url: str) -> sqlite3.Connection:
-    connection = sqlite3.connect(_database_path(database_url))
-    connection.row_factory = sqlite3.Row
+def get_connection(database_url: str) -> PgConnection:
+    connection = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    connection.autocommit = False
     return connection
-
-
-def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
-    existing_columns = {
-        row['name']
-        for row in connection.execute(f'PRAGMA table_info({table_name})').fetchall()
-    }
-    if column_name not in existing_columns:
-        connection.execute(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}')
 
 
 def initialize_database(database_url: str) -> None:
     connection = get_connection(database_url)
 
-    with connection:
-        connection.executescript(
-            '''
+    with connection, connection.cursor() as cursor:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS problems (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 slug TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL,
                 company TEXT NOT NULL,
-                department TEXT NOT NULL,
                 difficulty TEXT NOT NULL,
+                category_slug TEXT NOT NULL DEFAULT '',
                 statement_markdown TEXT NOT NULL,
                 constraints_text TEXT NOT NULL,
                 tags_json TEXT NOT NULL,
@@ -54,21 +46,25 @@ def initialize_database(database_url: str) -> None:
                 status TEXT NOT NULL DEFAULT 'draft',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
-            );
+            )
+        ''')
 
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS problem_test_cases (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                problem_id INTEGER NOT NULL,
+                id SERIAL PRIMARY KEY,
+                problem_id INTEGER NOT NULL REFERENCES problems(id),
                 case_type TEXT NOT NULL,
                 stdin_text TEXT NOT NULL,
                 expected_output_text TEXT NOT NULL,
-                sort_order INTEGER NOT NULL,
-                FOREIGN KEY(problem_id) REFERENCES problems(id)
-            );
+                sort_order INTEGER NOT NULL
+            )
+        ''')
 
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS submissions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                problem_id INTEGER NOT NULL,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                problem_id INTEGER NOT NULL REFERENCES problems(id),
                 language TEXT NOT NULL,
                 run_type TEXT NOT NULL,
                 code_text TEXT NOT NULL,
@@ -83,14 +79,35 @@ def initialize_database(database_url: str) -> None:
                 failed_expected_output TEXT,
                 failed_actual_output TEXT,
                 case_results_json TEXT NOT NULL DEFAULT '[]',
-                attribution_analysis_json TEXT NOT NULL DEFAULT '',
-                review_analysis_json TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(problem_id) REFERENCES problems(id)
-            );
+                judge_token TEXT,
+                created_at TEXT NOT NULL
+            )
+        ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS error_attributions (
+                id SERIAL PRIMARY KEY,
+                submission_id INTEGER NOT NULL REFERENCES submissions(id),
+                analysis_type TEXT NOT NULL,
+                primary_category TEXT NOT NULL DEFAULT '',
+                secondary_category TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                suggestion TEXT NOT NULL DEFAULT '',
+                bullets_json TEXT NOT NULL DEFAULT '[]',
+                line_refs_json TEXT NOT NULL DEFAULT '[]',
+                execution_status TEXT NOT NULL DEFAULT 'completed',
+                status_reason TEXT NOT NULL DEFAULT '',
+                provider TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                endpoint_url TEXT NOT NULL DEFAULT '',
+                raw_response_json TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS llm_settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
+                id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
                 provider TEXT NOT NULL,
                 endpoint_url TEXT NOT NULL,
                 solution_model TEXT NOT NULL,
@@ -102,32 +119,53 @@ def initialize_database(database_url: str) -> None:
                 api_key_secret TEXT NOT NULL DEFAULT '',
                 enabled INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL
-            );
-            '''
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS companies (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                name_en TEXT NOT NULL DEFAULT '',
+                abbreviation TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS problem_categories (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                slug TEXT NOT NULL UNIQUE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('SELECT COUNT(*) AS count FROM users')
+        if cursor.fetchone()['count'] == 0:
+            cursor.execute(
+                "INSERT INTO users (username, display_name, created_at) VALUES (%s, %s, %s)",
+                ('default', '默认用户', '2026-06-23T17:20:00Z'),
+            )
+
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS category_slug TEXT NOT NULL DEFAULT ''"
+        )
+        cursor.execute(
+            "ALTER TABLE problems DROP COLUMN IF EXISTS department"
         )
 
-        _ensure_column(connection, 'llm_settings', 'api_key_secret', "TEXT NOT NULL DEFAULT ''")
-        _ensure_column(connection, 'submissions', 'attribution_analysis_json', "TEXT NOT NULL DEFAULT ''")
-        _ensure_column(connection, 'submissions', 'review_analysis_json', "TEXT NOT NULL DEFAULT ''")
-
-        settings_count = connection.execute('SELECT COUNT(*) AS count FROM llm_settings').fetchone()['count']
-        if settings_count == 0:
-            connection.execute(
+        cursor.execute('SELECT COUNT(*) AS count FROM llm_settings')
+        if cursor.fetchone()['count'] == 0:
+            cursor.execute(
                 '''
                 INSERT INTO llm_settings (
-                    id,
-                    provider,
-                    endpoint_url,
-                    solution_model,
-                    attribution_model,
-                    review_model,
-                    solution_temperature,
-                    attribution_temperature,
-                    review_temperature,
-                    api_key_secret,
-                    enabled,
-                    updated_at
-                ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, provider, endpoint_url,
+                    solution_model, attribution_model, review_model,
+                    solution_temperature, attribution_temperature, review_temperature,
+                    api_key_secret, enabled, updated_at
+                ) VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''',
                 (
                     'OpenAI Compatible',
@@ -144,43 +182,64 @@ def initialize_database(database_url: str) -> None:
                 ),
             )
 
-        problem_count = connection.execute('SELECT COUNT(*) AS count FROM problems').fetchone()['count']
-        if problem_count == 0:
-            _seed_database(connection)
+        cursor.execute('SELECT COUNT(*) AS count FROM problem_categories')
+        if cursor.fetchone()['count'] == 0:
+            _seed_categories(cursor)
+
+        cursor.execute('SELECT COUNT(*) AS count FROM problems')
+        if cursor.fetchone()['count'] == 0:
+            _seed_database(cursor)
 
     connection.close()
 
 
-def _seed_database(connection: sqlite3.Connection) -> None:
+def _seed_categories(cursor) -> None:
+    _CATEGORIES = [
+        (1, 'Two Pointers', 'two-pointers'),
+        (2, 'Sliding Window', 'sliding-window'),
+        (3, 'Hashing', 'hashing'),
+        (4, 'Binary Search', 'binary-search'),
+        (5, 'Prefix Sum', 'prefix-sum'),
+        (6, 'Intervals', 'intervals'),
+        (7, 'Matrix Grid', 'matrix-grid'),
+        (8, 'Linked List', 'linked-list'),
+        (9, 'Stack Queue', 'stack-queue'),
+        (10, 'Monotonic Stack', 'monotonic-stack'),
+        (11, 'Heap Priority Queue', 'heap-priority-queue'),
+        (12, 'Tree', 'tree'),
+        (13, 'Graphs', 'graphs'),
+        (14, 'Backtracking', 'backtracking'),
+        (15, 'DP', 'dynamic-programming'),
+        (16, 'Greedy', 'greedy'),
+        (17, 'Bit Manipulation', 'bit-manipulation'),
+        (18, 'Simulation', 'simulation'),
+    ]
+    for cat_id, name, slug in _CATEGORIES:
+        cursor.execute(
+            "INSERT INTO problem_categories (id, name, slug, sort_order, created_at) VALUES (%s, %s, %s, %s, %s)",
+            (cat_id, name, slug, cat_id, '2026-06-24T00:00:00Z'),
+        )
+
+
+def _seed_database(cursor) -> None:
     for problem in SEED_PROBLEMS:
-        cursor = connection.execute(
+        cursor.execute(
             '''
             INSERT INTO problems (
-                slug,
-                title,
-                company,
-                department,
-                difficulty,
-                statement_markdown,
-                constraints_text,
-                tags_json,
-                examples_json,
-                supported_languages_json,
-                starter_templates_json,
-                source_type,
-                source_ref,
-                external_id,
-                status,
-                created_at,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                slug, title, company, difficulty, category_slug,
+                statement_markdown, constraints_text, tags_json,
+                examples_json, supported_languages_json, starter_templates_json,
+                source_type, source_ref, external_id,
+                status, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             ''',
             (
                 problem['slug'],
                 problem['title'],
                 problem['company'],
-                problem['department'],
                 problem['difficulty'],
+                problem['category_slug'],
                 problem['statement_markdown'],
                 problem['constraints_text'],
                 problem['tags_json'],
@@ -195,18 +254,14 @@ def _seed_database(connection: sqlite3.Connection) -> None:
                 problem['updated_at'],
             ),
         )
+        problem_id = cursor.fetchone()['id']
 
-        problem_id = cursor.lastrowid
         for test_case in problem['test_cases']:
-            connection.execute(
+            cursor.execute(
                 '''
                 INSERT INTO problem_test_cases (
-                    problem_id,
-                    case_type,
-                    stdin_text,
-                    expected_output_text,
-                    sort_order
-                ) VALUES (?, ?, ?, ?, ?)
+                    problem_id, case_type, stdin_text, expected_output_text, sort_order
+                ) VALUES (%s, %s, %s, %s, %s)
                 ''',
                 (
                     problem_id,

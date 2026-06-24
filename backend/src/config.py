@@ -7,6 +7,6 @@ class Settings(BaseSettings):
 
     app_name: str = 'ByteHunter Backend'
     api_prefix: str = '/api/v1'
-    database_url: str = Field(default='sqlite:///./bytehunter.db')
+    database_url: str = Field(default='postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter')
     redis_url: str = 'redis://localhost:6379/0'
     judge0_url: str = 'https://ce.judge0.com'
