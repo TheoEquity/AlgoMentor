@@ -26,6 +26,8 @@ export type SubmissionAnalysisSnapshot = {
   endpoint_url: string
   execution_status: 'completed' | 'degraded'
   status_reason: string
+  primary_category: string
+  secondary_category: string
   title: string
   summary: string
   bullets: string[]

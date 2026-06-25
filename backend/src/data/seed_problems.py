@@ -34,9 +34,12 @@ SEED_PROBLEMS = [
             }
         ),
         'source_type': 'manual',
+        'source': '手工',
+        'frequency': '高',
+        'year': 2026,
         'source_ref': 'ByteHunter 首批手工题库',
         'external_id': 'BH-001',
-        'status': 'published',
+        'status': '未开始',
         'created_at': '2026-06-23T16:00:00Z',
         'updated_at': '2026-06-23T16:00:00Z',
         'test_cases': [
@@ -81,9 +84,12 @@ SEED_PROBLEMS = [
             }
         ),
         'source_type': 'manual',
+        'source': '手工',
+        'frequency': '中',
+        'year': 2026,
         'source_ref': 'ByteHunter 首批手工题库',
         'external_id': 'BH-014',
-        'status': 'published',
+        'status': '未开始',
         'created_at': '2026-06-23T16:05:00Z',
         'updated_at': '2026-06-23T16:05:00Z',
         'test_cases': [

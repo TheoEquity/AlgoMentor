@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { createProblem, listProblems } from '../lib/problemApi'
+import { createProblem, deleteProblem, listProblems } from '../lib/problemApi'
 import { listCategories } from '../lib/categoryApi'
 import { listCompanies } from '../lib/companyApi'
 import type { ProblemCategory } from '../types/problemCategory'
@@ -22,6 +22,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [createError, setCreateError] = useState('')
   const [createSuccess, setCreateSuccess] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [form, setForm] = useState({
     slug: '',
@@ -33,6 +34,9 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
     constraints_text: '',
     tags_text: '',
     source_type: 'manual',
+    source: '手工',
+    frequency: '中',
+    year: '2026',
     source_ref: '',
     external_id: '',
     sample_input: '',
@@ -71,6 +75,9 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       constraints_text: '',
       tags_text: '',
       source_type: 'manual',
+      source: '手工',
+      frequency: '中',
+      year: '2026',
       source_ref: '',
       external_id: '',
       sample_input: '',
@@ -117,9 +124,12 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
         Java: form.java_template,
       },
       source_type: form.source_type.trim() || 'manual',
+      source: form.source.trim() || '手工',
+      frequency: form.frequency.trim() || '中',
+      year: form.year.trim() ? Number(form.year) : null,
       source_ref: form.source_ref.trim(),
       external_id: form.external_id.trim(),
-      status: 'published',
+      status: '未开始',
       test_cases: [
         {
           case_type: 'sample',
@@ -149,6 +159,21 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
     }
   }
 
+  const handleDeleteProblem = async (problem: ProblemListItem) => {
+    setDeleteError('')
+    const confirmed = window.confirm(`确认删除题目「${problem.title}」？`)
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteProblem(problem.id)
+      setProblems((current) => current.filter((item) => item.id !== problem.id))
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : '删除失败')
+    }
+  }
+
   const filteredProblems = useMemo(() => {
     return problems.filter((problem) => {
       const matchesSearch =
@@ -167,6 +192,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
 
   const companyNames = Array.from(new Set(problems.map((problem) => problem.company)))
   const categoryNames: { slug: string; name: string }[] = categories.map((c) => ({ slug: c.slug, name: c.name }))
+  const categoryNameBySlug = new Map(categoryNames.map((category) => [category.slug, category.name]))
 
   return (
     <section>
@@ -236,11 +262,12 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
           </label>
 
           <label className="filter-control">
-            <select defaultValue="all">
-              <option value="all">全部状态</option>
-              <option value="ac">已通过</option>
-              <option value="review">待复盘</option>
-              <option value="wa">待修正</option>
+              <select defaultValue="all">
+                <option value="all">全部最新状态</option>
+                <option value="pending">未开始</option>
+                <option value="ac">已通过</option>
+                <option value="review">待复盘</option>
+                <option value="wa">待修正</option>
             </select>
           </label>
 
@@ -369,6 +396,27 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               <input value={form.source_type} onChange={(event) => handleCreateField('source_type', event.target.value)} />
             </label>
             <label className="settings-field">
+              <span>来源</span>
+              <select value={form.source} onChange={(event) => handleCreateField('source', event.target.value)}>
+                <option value="牛客">牛客</option>
+                <option value="Leetcode">Leetcode</option>
+                <option value="手工">手工</option>
+                <option value="AI派生">AI派生</option>
+              </select>
+            </label>
+            <label className="settings-field">
+              <span>频率</span>
+              <select value={form.frequency} onChange={(event) => handleCreateField('frequency', event.target.value)}>
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+              </select>
+            </label>
+            <label className="settings-field">
+              <span>年度</span>
+              <input value={form.year} onChange={(event) => handleCreateField('year', event.target.value)} />
+            </label>
+            <label className="settings-field">
               <span>来源引用</span>
               <input value={form.source_ref} onChange={(event) => handleCreateField('source_ref', event.target.value)} />
             </label>
@@ -409,6 +457,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       ) : null}
 
       {createError ? <div className="backend-note">录题失败：{createError}</div> : null}
+      {deleteError ? <div className="backend-note">删除失败：{deleteError}</div> : null}
       {createSuccess ? <div className="backend-note success-note">{createSuccess}</div> : null}
 
       <div className="table-card">
@@ -417,12 +466,14 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
             <thead>
               <tr>
                 <th>题目</th>
-                <th>公司</th>
                 <th>题型</th>
+                <th className="problem-tags-column">标签</th>
+                <th>公司</th>
                 <th>难度</th>
-                <th>标签</th>
-                <th>最近状态</th>
-                <th>最近训练</th>
+                <th>频率</th>
+                <th>年度</th>
+                <th>来源</th>
+                <th>最新状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -439,10 +490,8 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
                       </div>
                     </div>
                   </td>
-                  <td>{problem.company}</td>
-                  <td>{problem.category_slug || '-'}</td>
-                  <td>{problem.difficulty}</td>
-                  <td>
+                  <td>{categoryNameBySlug.get(problem.category_slug) || problem.category_slug || '-'}</td>
+                  <td className="problem-tags-column">
                     <div className="tag-list">
                       {problem.tags.map((tag) => (
                         <span key={tag} className="tag-badge">
@@ -451,20 +500,27 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
                       ))}
                     </div>
                   </td>
+                  <td>{problem.company}</td>
+                  <td>{problem.difficulty}</td>
+                  <td>{problem.frequency}</td>
+                  <td>{problem.year || '-'}</td>
+                  <td>{problem.source}</td>
                   <td>
-                    <span className={`status-badge ${problem.status === 'published' ? 'ac' : 'review'}`}>
-                      {problem.status === 'published' ? 'READY' : problem.status}
+                    <span className={`status-badge ${problem.status === '已通过' ? 'ac' : problem.status === '待修正' ? 'wa' : 'review'}`}>
+                      {problem.status}
                     </span>
                   </td>
-                  <td>{problem.updated_at.replace('T', ' ').replace('Z', '')}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => onOpenProblem(problem.id)}
-                    >
-                      进入训练
-                    </button>
+                    <div className="table-actions">
+                      <button type="button" className="link-button" onClick={() => onOpenProblem(problem.id)}>
+                        编辑
+                      </button>
+                      <button type="button" className="icon-danger-button" aria-label={`删除 ${problem.title}`} onClick={() => void handleDeleteProblem(problem)}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2l1 11h4l1-11h2l-1.2 13H8.2L7 9Z" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

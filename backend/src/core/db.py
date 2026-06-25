@@ -41,9 +41,12 @@ def initialize_database(database_url: str) -> None:
                 supported_languages_json TEXT NOT NULL,
                 starter_templates_json TEXT NOT NULL,
                 source_type TEXT,
+                source TEXT NOT NULL DEFAULT '手工',
+                frequency TEXT NOT NULL DEFAULT '中',
+                year INTEGER,
                 source_ref TEXT,
                 external_id TEXT,
-                status TEXT NOT NULL DEFAULT 'draft',
+                status TEXT NOT NULL DEFAULT '未开始',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -153,6 +156,18 @@ def initialize_database(database_url: str) -> None:
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS category_slug TEXT NOT NULL DEFAULT ''"
         )
         cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT '手工'"
+        )
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT '中'"
+        )
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS year INTEGER"
+        )
+        cursor.execute(
+            "UPDATE problems SET status = '未开始' WHERE status IN ('published', 'draft')"
+        )
+        cursor.execute(
             "ALTER TABLE problems DROP COLUMN IF EXISTS department"
         )
 
@@ -229,9 +244,9 @@ def _seed_database(cursor) -> None:
                 slug, title, company, difficulty, category_slug,
                 statement_markdown, constraints_text, tags_json,
                 examples_json, supported_languages_json, starter_templates_json,
-                source_type, source_ref, external_id,
+                source_type, source, frequency, year, source_ref, external_id,
                 status, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             ''',
             (
@@ -247,6 +262,9 @@ def _seed_database(cursor) -> None:
                 problem['supported_languages_json'],
                 problem['starter_templates_json'],
                 problem['source_type'],
+                problem['source'],
+                problem['frequency'],
+                problem['year'],
                 problem['source_ref'],
                 problem['external_id'],
                 problem['status'],

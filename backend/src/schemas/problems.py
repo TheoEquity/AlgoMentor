@@ -33,9 +33,12 @@ class ProblemBase(BaseModel):
     supported_languages: list[Literal['Python', 'C++', 'Java']] = Field(min_length=1)
     starter_templates: dict[str, str]
     source_type: str = 'manual'
+    source: str = '手工'
+    frequency: str = '中'
+    year: int | None = None
     source_ref: str = ''
     external_id: str = ''
-    status: Literal['draft', 'published'] = 'published'
+    status: Literal['未开始', '已通过', '待复盘', '待修正'] = '未开始'
 
 
 class ProblemCreate(ProblemBase):
@@ -50,6 +53,9 @@ class ProblemListItem(BaseModel):
     difficulty: str
     category_slug: str
     tags: list[str]
+    frequency: str
+    year: int | None = None
+    source: str
     supported_languages: list[str]
     status: str
     updated_at: str
@@ -60,6 +66,9 @@ class ProblemDetail(ProblemListItem):
     constraints_text: str
     starter_templates: dict[str, str]
     source_type: str | None = None
+    source: str | None = None
+    frequency: str | None = None
+    year: int | None = None
     source_ref: str | None = None
     external_id: str | None = None
     examples: list[ExampleItem]

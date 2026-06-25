@@ -25,13 +25,43 @@ class AttributionAnalysisRequest(BaseModel):
     submission_id: int = Field(ge=1)
 
 
+class HintAnalysisRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    problem_id: int = Field(ge=1)
+    language: Literal['Python', 'C++', 'Java']
+    code_text: str = ''
+    hint_step: int = Field(ge=1, le=6)
+    hint_strength: Literal['light', 'medium', 'strong'] = 'light'
+    submission_id: int | None = Field(default=None, ge=1)
+
+
+class ProblemAnalysisRequest(BaseModel):
+    problem_id: int = Field(ge=1)
+
+
+class ProblemChatMessage(BaseModel):
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1)
+
+
+class ProblemChatRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    problem_id: int = Field(ge=1)
+    messages: list[ProblemChatMessage] = Field(default_factory=list)
+    question: str = Field(min_length=1)
+
+
 class AnalysisResponse(BaseModel):
-    analysis_type: Literal['solution', 'attribution', 'review']
+    analysis_type: Literal['solution', 'attribution', 'review', 'hint', 'problem_analysis', 'problem_qa']
     provider: str
     model: str
     endpoint_url: str
     execution_status: Literal['completed', 'degraded'] = 'completed'
     status_reason: str = ''
+    primary_category: str = ''
+    secondary_category: str = ''
     title: str
     summary: str
     bullets: list[str]

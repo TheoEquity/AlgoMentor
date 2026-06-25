@@ -46,7 +46,7 @@ class AnalysisServiceTests(unittest.TestCase):
             category_slug='greedy',
             tags=['数组', '前后缀'],
             supported_languages=['Python', 'C++', 'Java'],
-            status='published',
+            status='未开始',
             updated_at='2026-06-23T16:00:00Z',
             statement_markdown='给定一个数组，求最大差值。',
             constraints_text='2 <= n <= 2 * 10^5',

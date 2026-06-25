@@ -78,9 +78,9 @@ class ProblemRepository:
                     slug, title, company, difficulty, category_slug,
                     statement_markdown, constraints_text, tags_json,
                     examples_json, supported_languages_json, starter_templates_json,
-                    source_type, source_ref, external_id,
+                    source_type, source, frequency, year, source_ref, external_id,
                     status, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 ''',
                 (
@@ -96,6 +96,9 @@ class ProblemRepository:
                     json.dumps(payload.supported_languages),
                     json.dumps(payload.starter_templates),
                     payload.source_type,
+                    payload.source,
+                    payload.frequency,
+                    payload.year,
                     payload.source_ref,
                     payload.external_id,
                     payload.status,
@@ -129,6 +132,101 @@ class ProblemRepository:
 
         return created_problem
 
+    def update_problem(self, problem_id: int, payload: ProblemCreate) -> ProblemDetail | None:
+        now = datetime.now(UTC).isoformat()
+        connection = get_connection(self.database_url)
+
+        try:
+            with connection, connection.cursor() as cursor:
+                cursor.execute('SELECT id FROM problems WHERE id = %s', (problem_id,))
+                if cursor.fetchone() is None:
+                    return None
+
+                cursor.execute(
+                    '''
+                    UPDATE problems
+                    SET slug = %s,
+                        title = %s,
+                        company = %s,
+                        difficulty = %s,
+                        category_slug = %s,
+                        statement_markdown = %s,
+                        constraints_text = %s,
+                        tags_json = %s,
+                        examples_json = %s,
+                        supported_languages_json = %s,
+                        starter_templates_json = %s,
+                        source_type = %s,
+                        source = %s,
+                        frequency = %s,
+                        year = %s,
+                        source_ref = %s,
+                        external_id = %s,
+                        status = %s,
+                        updated_at = %s
+                    WHERE id = %s
+                    ''',
+                    (
+                        payload.slug,
+                        payload.title,
+                        payload.company,
+                        payload.difficulty,
+                        payload.category_slug,
+                        payload.statement_markdown,
+                        payload.constraints_text,
+                        json.dumps(payload.tags),
+                        json.dumps([example.model_dump() for example in payload.examples]),
+                        json.dumps(payload.supported_languages),
+                        json.dumps(payload.starter_templates),
+                        payload.source_type,
+                        payload.source,
+                        payload.frequency,
+                        payload.year,
+                        payload.source_ref,
+                        payload.external_id,
+                        payload.status,
+                        now,
+                        problem_id,
+                    ),
+                )
+
+                cursor.execute('DELETE FROM problem_test_cases WHERE problem_id = %s', (problem_id,))
+                for test_case in payload.test_cases:
+                    cursor.execute(
+                        '''
+                        INSERT INTO problem_test_cases (
+                            problem_id, case_type, stdin_text, expected_output_text, sort_order
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        ''',
+                        (
+                            problem_id,
+                            test_case.case_type,
+                            test_case.stdin_text,
+                            test_case.expected_output_text,
+                            test_case.sort_order,
+                        ),
+                    )
+        finally:
+            connection.close()
+
+        return self.get_problem(problem_id)
+
+    def delete_problem(self, problem_id: int) -> bool:
+        connection = get_connection(self.database_url)
+        try:
+            with connection, connection.cursor() as cursor:
+                cursor.execute('SELECT id FROM problems WHERE id = %s', (problem_id,))
+                if cursor.fetchone() is None:
+                    return False
+
+                cursor.execute('DELETE FROM error_attributions WHERE submission_id IN (SELECT id FROM submissions WHERE problem_id = %s)', (problem_id,))
+                cursor.execute('DELETE FROM submissions WHERE problem_id = %s', (problem_id,))
+                cursor.execute('DELETE FROM problem_test_cases WHERE problem_id = %s', (problem_id,))
+                cursor.execute('DELETE FROM problems WHERE id = %s', (problem_id,))
+            return True
+        finally:
+            connection.close()
+
     @staticmethod
     def _list_item_from_row(row: dict) -> ProblemListItem:
         return ProblemListItem(
@@ -139,6 +237,9 @@ class ProblemRepository:
             difficulty=row['difficulty'],
             category_slug=row['category_slug'],
             tags=json.loads(row['tags_json']),
+            frequency=row['frequency'],
+            year=row['year'],
+            source=row['source'],
             supported_languages=json.loads(row['supported_languages_json']),
             status=row['status'],
             updated_at=row['updated_at'],
@@ -160,6 +261,9 @@ class ProblemRepository:
             supported_languages=json.loads(row['supported_languages_json']),
             starter_templates=json.loads(row['starter_templates_json']),
             source_type=row['source_type'],
+            source=row['source'],
+            frequency=row['frequency'],
+            year=row['year'],
             source_ref=row['source_ref'],
             external_id=row['external_id'],
             status=row['status'],

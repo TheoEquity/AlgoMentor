@@ -6,6 +6,9 @@ export type ProblemListItem = {
   difficulty: string
   category_slug: string
   tags: string[]
+  frequency: string
+  year?: number | null
+  source: string
   supported_languages: string[]
   status: string
   updated_at: string
@@ -24,6 +27,8 @@ export type ProblemTestCase = {
   sort_order: number
 }
 
+export type ProblemLatestStatus = '未开始' | '已通过' | '待复盘' | '待修正'
+
 export type ProblemCreatePayload = {
   slug: string
   title: string
@@ -37,9 +42,12 @@ export type ProblemCreatePayload = {
   supported_languages: ('Python' | 'C++' | 'Java')[]
   starter_templates: Record<string, string>
   source_type: string
+  source: string
+  frequency: string
+  year?: number | null
   source_ref: string
   external_id: string
-  status: 'draft' | 'published'
+  status: ProblemLatestStatus
   test_cases: ProblemTestCase[]
 }
 

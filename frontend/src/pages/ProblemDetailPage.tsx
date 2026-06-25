@@ -2,7 +2,7 @@ import Editor, { DiffEditor } from '@monaco-editor/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
-import { streamAttributionAnalysis, streamReviewAnalysis, streamSolutionAnalysis } from '../lib/analysisApi'
+import { analyzeHint, streamAttributionAnalysis, streamReviewAnalysis, streamSolutionAnalysis } from '../lib/analysisApi'
 import { createSubmission, listSubmissions } from '../lib/submissionApi'
 import type { AnalysisResult, AnalysisStreamMeta } from '../types/analysis'
 import type { ProblemDetail } from '../types/problem'
@@ -10,8 +10,9 @@ import type { SubmissionResult, SubmissionRunType, SubmissionVerdict } from '../
 
 type WorkspaceLanguage = 'Python' | 'C++' | 'Java'
 type WorkspaceTab = 'workspace' | 'history'
-type WorkbenchTab = 'result' | 'explain' | 'review'
+type WorkbenchTab = 'result' | 'hint' | 'explain' | 'review'
 type DrawerTab = 'input' | 'output' | 'diff'
+type HintStrength = 'light' | 'medium' | 'strong'
 
 type ProblemDetailPageProps = {
   problem: ProblemDetail
@@ -44,6 +45,14 @@ type RetryFailureContext = {
   message: string
   timeLabel: string
 }
+
+const hintStepLabels = ['读题澄清', '关键观察', '算法方向', '边界条件', '伪代码骨架', '代码风险点']
+
+const hintStrengthOptions: Array<{ value: HintStrength; label: string }> = [
+  { value: 'light', label: '轻提示' },
+  { value: 'medium', label: '中提示' },
+  { value: 'strong', label: '强提示' },
+]
 
 function createEmptyStreamPreview(): StreamPreview {
   return {
@@ -232,14 +241,14 @@ function mergeSubmissionAnalysis(
   if (analysis.analysis_type === 'attribution') {
     return {
       ...submission,
-      attribution_analysis: analysis,
+      attribution_analysis: { ...analysis, analysis_type: 'attribution' },
     }
   }
 
   if (analysis.analysis_type === 'review') {
     return {
       ...submission,
-      review_analysis: analysis,
+      review_analysis: { ...analysis, analysis_type: 'review' },
     }
   }
 
@@ -337,15 +346,17 @@ function parseStreamPreview(streamText: string): StreamPreview {
 function verdictClassName(verdict: SubmissionVerdict | ProblemDetail['status']): string {
   switch (verdict) {
     case 'AC':
-    case 'published':
+    case '已通过':
       return 'ac'
     case 'WA':
+    case '待修正':
       return 'wa'
     case 'RE':
+    case '待复盘':
       return 'review'
     case 'CE':
     case 'TLE':
-    case 'draft':
+    case '未开始':
     default:
       return 'review'
   }
@@ -417,6 +428,11 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
   const [reviewStreamMeta, setReviewStreamMeta] = useState<AnalysisStreamMeta | null>(null)
   const [reviewAttemptCount, setReviewAttemptCount] = useState(0)
   const [reviewLastFailure, setReviewLastFailure] = useState<RetryFailureContext | null>(null)
+  const [hintStrength, setHintStrength] = useState<HintStrength>('light')
+  const [hintStep, setHintStep] = useState(1)
+  const [hints, setHints] = useState<AnalysisResult[]>([])
+  const [isHinting, setIsHinting] = useState(false)
+  const [hintError, setHintError] = useState('')
   const [latestSubmission, setLatestSubmission] = useState<SubmissionResult | null>(null)
   const [submissionHistory, setSubmissionHistory] = useState<SubmissionResult[]>([])
   const [selectedCaseIndex, setSelectedCaseIndex] = useState(1)
@@ -444,6 +460,10 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
     setReviewStreamMeta(null)
     setReviewAttemptCount(0)
     setReviewLastFailure(null)
+    setHintStrength('light')
+    setHintStep(1)
+    setHints([])
+    setHintError('')
     setAnalysisError('')
     setReviewError('')
     setLatestSubmission(null)
@@ -718,6 +738,28 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
       setReviewLastFailure({ message, timeLabel: buildTimeLabel() })
     } finally {
       setIsReviewing(false)
+    }
+  }
+
+  const requestNextHint = async () => {
+    setIsHinting(true)
+    setHintError('')
+
+    try {
+      const result = await analyzeHint({
+        problem_id: problem.id,
+        language: selectedLanguage,
+        code_text: currentCode,
+        hint_step: hintStep,
+        hint_strength: hintStrength,
+        submission_id: latestSubmission?.id ?? null,
+      })
+      setHints((current) => [...current, result])
+      setHintStep((current) => Math.min(current + 1, hintStepLabels.length))
+    } catch (error) {
+      setHintError(error instanceof Error ? error.message : '提示生成失败')
+    } finally {
+      setIsHinting(false)
     }
   }
 
@@ -1050,6 +1092,13 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
             </button>
             <button
               type="button"
+              className={`workspace-tab${workbenchTab === 'hint' ? ' active' : ''}`}
+              onClick={() => setWorkbenchTab('hint')}
+            >
+              分步提示
+            </button>
+            <button
+              type="button"
               className={`workspace-tab${workbenchTab === 'explain' ? ' active' : ''}`}
               onClick={() => setWorkbenchTab('explain')}
             >
@@ -1070,7 +1119,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
             <div className="workbench-section">
               <div className="result-status-card">
                 <span className={`status-badge ${verdictClassName(latestSubmission?.verdict ?? problem.status)}`}>
-                  {latestSubmission?.verdict ?? 'READY'}
+                  {latestSubmission?.verdict ?? problem.status}
                 </span>
                 <div className="result-metrics">
                   <strong>{latestSubmission?.runtime_ms ?? 0} ms</strong>
@@ -1097,6 +1146,63 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                   </button>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {workbenchTab === 'hint' ? (
+            <div className="workbench-section hint-section">
+              <div className="result-status-card">
+                <div>
+                  <strong>渐进式提示</strong>
+                  <div className="analysis-meta-text">按做题过程逐步释放线索，优先保留独立思考空间。</div>
+                </div>
+                <button type="button" className="button primary" disabled={isHinting} onClick={() => void requestNextHint()}>
+                  {isHinting ? '生成中...' : `获取第 ${hintStep} 步`}
+                </button>
+              </div>
+
+              <div className="hint-control-row">
+                {hintStrengthOptions.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`chip-button${hintStrength === item.value ? ' active' : ''}`}
+                    onClick={() => setHintStrength(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {hintError ? <div className="backend-note">提示生成失败：{hintError}</div> : null}
+
+              <div className="stream-progress-row">
+                {hintStepLabels.map((label, index) => (
+                  <span key={label} className={`stream-progress-pill ${index < hints.length ? 'done' : index + 1 === hintStep ? 'streaming' : 'waiting'}`}>
+                    {index + 1}. {label}
+                  </span>
+                ))}
+              </div>
+
+              {hints.length === 0 ? (
+                <p>点击获取提示后，会从读题澄清开始逐步给出线索。</p>
+              ) : (
+                <div className="diagnostic-list">
+                  {hints.map((item, index) => (
+                    <div key={`${item.title}-${index}`} className="diagnostic-item">
+                      <strong>{item.title}</strong>
+                      <span>{item.summary}</span>
+                      {item.bullets.length > 0 ? (
+                        <ul className="review-bullet-list">
+                          {item.bullets.map((bullet) => (
+                            <li key={bullet}>{bullet}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
 

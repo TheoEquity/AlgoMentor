@@ -45,6 +45,8 @@ class SubmissionAnalysisSnapshot(BaseModel):
     endpoint_url: str
     execution_status: Literal['completed', 'degraded'] = 'completed'
     status_reason: str = ''
+    primary_category: str = ''
+    secondary_category: str = ''
     title: str
     summary: str
     bullets: list[str]

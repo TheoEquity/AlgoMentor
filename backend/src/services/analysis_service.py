@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
-from schemas.analysis import AnalysisLineRef, AnalysisResponse
+from schemas.analysis import AnalysisLineRef, AnalysisResponse, ProblemChatMessage
 from schemas.llm_settings import LLMSettings
 from schemas.problems import ProblemDetail
 from schemas.submissions import SubmissionResult
@@ -52,6 +52,55 @@ class AnalysisService:
             prompt=prompt,
             fallback=self._fallback_review(settings, problem, submission),
             verdict=submission.verdict,
+        )
+
+    def generate_hint(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        problem: ProblemDetail,
+        language: str,
+        code_text: str,
+        hint_step: int,
+        hint_strength: str,
+        submission: SubmissionResult | None = None,
+    ) -> AnalysisResponse:
+        prompt = self._build_hint_prompt(problem, language, code_text, hint_step, hint_strength, submission)
+        return self._run_model(
+            analysis_type='hint',
+            settings=settings,
+            api_key=api_key,
+            model=settings.solution_model,
+            temperature=settings.solution_temperature,
+            prompt=prompt,
+            fallback=self._fallback_hint(settings, problem, hint_step, hint_strength, submission),
+            verdict=submission.verdict if submission is not None else None,
+        )
+
+    def analyze_problem_thinking(self, settings: LLMSettings, api_key: str, problem: ProblemDetail) -> AnalysisResponse:
+        prompt = self._build_problem_analysis_prompt(problem)
+        return self._run_model(
+            analysis_type='problem_analysis',
+            settings=settings,
+            api_key=api_key,
+            model=settings.solution_model,
+            temperature=settings.solution_temperature,
+            prompt=prompt,
+            fallback=self._fallback_problem_analysis(settings, problem),
+            verdict=None,
+        )
+
+    def chat_problem_thinking(self, settings: LLMSettings, api_key: str, problem: ProblemDetail, messages: list[ProblemChatMessage], question: str) -> AnalysisResponse:
+        prompt = self._build_problem_chat_prompt(problem, messages, question)
+        return self._run_model(
+            analysis_type='problem_qa',
+            settings=settings,
+            api_key=api_key,
+            model=settings.solution_model,
+            temperature=settings.solution_temperature,
+            prompt=prompt,
+            fallback=self._fallback_problem_chat(settings, problem, question),
+            verdict=None,
         )
 
     def stream_solution_analysis(self, settings: LLMSettings, api_key: str, problem: ProblemDetail, language: str, code_text: str) -> Iterator[tuple[str, dict | AnalysisResponse]]:
@@ -249,6 +298,8 @@ class AnalysisService:
             endpoint_url=settings.endpoint_url,
             execution_status='completed',
             status_reason='',
+            primary_category=str(payload.get('primary_category') or fallback.primary_category),
+            secondary_category=str(payload.get('secondary_category') or fallback.secondary_category),
             title=str(payload.get('title') or fallback.title),
             summary=str(payload.get('summary') or fallback.summary),
             bullets=bullets or fallback.bullets,
@@ -297,6 +348,8 @@ class AnalysisService:
 
         normalized['title'] = str(normalized.get('title') or fallback.title)
         normalized['summary'] = str(normalized.get('summary') or fallback.summary)
+        normalized['primary_category'] = str(normalized.get('primary_category') or fallback.primary_category)
+        normalized['secondary_category'] = str(normalized.get('secondary_category') or fallback.secondary_category)
         normalized['bullets'] = bullets
         normalized['line_refs'] = line_refs
         return normalized
@@ -373,6 +426,8 @@ class AnalysisService:
             endpoint_url='',
             execution_status='completed',
             status_reason='',
+            primary_category='',
+            secondary_category='',
             title='',
             summary='',
             bullets=[],
@@ -394,7 +449,7 @@ class AnalysisService:
     def _build_attribution_prompt(self, problem: ProblemDetail, submission: SubmissionResult) -> str:
         return (
             '请对下面的判题结果做错误归因，并返回 JSON。'
-            'title 是短标题，summary 是一段总结，bullets 是 3 到 5 条建议，line_refs 是可选的行号提示。\n'
+            'primary_category 是主要错误类型，secondary_category 是次级错误类型，title 是短标题，summary 是一段总结，bullets 是 3 到 5 条建议，line_refs 是可选的行号提示。\n'
             f'题目标题：{problem.title}\n'
             f'题目标签：{", ".join(problem.tags)}\n'
             f'Verdict：{submission.verdict}\n'
@@ -422,6 +477,68 @@ class AnalysisService:
             '请重点输出下次训练建议、薄弱点和继续训练动作。\n'
         )
 
+    def _build_hint_prompt(self, problem: ProblemDetail, language: str, code_text: str, hint_step: int, hint_strength: str, submission: SubmissionResult | None) -> str:
+        step_names = {
+            1: '读题澄清',
+            2: '关键观察',
+            3: '算法方向',
+            4: '边界条件',
+            5: '伪代码骨架',
+            6: '代码风险点',
+        }
+        verdict_text = submission.verdict if submission is not None else '尚未判题'
+        failed_context = ''
+        if submission is not None:
+            failed_context = (
+                f'失败输入：{submission.failed_input}\n'
+                f'预期输出：{submission.failed_expected_output}\n'
+                f'实际输出：{submission.failed_actual_output}\n'
+                f'错误输出：{submission.stderr_output or submission.compiler_output}\n'
+            )
+
+        return (
+            '请为 ACM 编程训练生成渐进式提示，并返回 JSON。'
+            'title 是本步提示标题，summary 是克制提示，bullets 是 2 到 4 条可执行提示，line_refs 可指出当前代码风险。'
+            '避免直接给完整代码；strong 强度可以给伪代码片段或关键状态定义。\n'
+            f'提示步骤：第 {hint_step} 步 - {step_names.get(hint_step, "提示")}\n'
+            f'提示强度：{hint_strength}\n'
+            f'题目标题：{problem.title}\n'
+            f'题目标签：{", ".join(problem.tags)}\n'
+            f'题面：{problem.statement_markdown}\n'
+            f'约束：{problem.constraints_text}\n'
+            f'语言：{language}\n'
+            f'Verdict：{verdict_text}\n'
+            f'{failed_context}'
+            f'当前代码：\n{code_text}\n'
+        )
+
+    def _build_problem_analysis_prompt(self, problem: ProblemDetail) -> str:
+        examples = '\n'.join(f'输入：{item.input}\n输出：{item.output}\n解释：{item.explanation}' for item in problem.examples)
+        return (
+            '请分析这道算法题本身的解题思路，并返回 JSON。'
+            'title 是短标题，summary 是总体思路，bullets 覆盖题意拆解、关键观察、算法选择、复杂度和易错点，line_refs 返回空数组。'
+            '聚焦解题思想和证明，不聚焦用户代码实现。\n'
+            f'题目标题：{problem.title}\n'
+            f'题目标签：{", ".join(problem.tags)}\n'
+            f'题面：{problem.statement_markdown}\n'
+            f'约束：{problem.constraints_text}\n'
+            f'样例：\n{examples}\n'
+        )
+
+    def _build_problem_chat_prompt(self, problem: ProblemDetail, messages: list[ProblemChatMessage], question: str) -> str:
+        history = '\n'.join(f'{item.role}: {item.content}' for item in messages[-8:])
+        return (
+            '请作为算法题解题助教回答用户追问，并返回 JSON。'
+            'title 是回答主题，summary 是直接回答，bullets 是推理步骤或补充说明，line_refs 返回空数组。'
+            '聚焦题目思路、复杂度证明、反例、边界条件和同类题迁移。\n'
+            f'题目标题：{problem.title}\n'
+            f'题目标签：{", ".join(problem.tags)}\n'
+            f'题面：{problem.statement_markdown}\n'
+            f'约束：{problem.constraints_text}\n'
+            f'对话历史：\n{history}\n'
+            f'用户问题：{question}\n'
+        )
+
     def _fallback_solution(self, settings: LLMSettings, problem: ProblemDetail, language: str, code_text: str) -> AnalysisResponse:
         code_lower = code_text.lower()
         bullets = [
@@ -443,6 +560,8 @@ class AnalysisService:
             endpoint_url=settings.endpoint_url,
             execution_status='completed',
             status_reason='',
+            primary_category='',
+            secondary_category='',
             title='解题分析',
             summary='系统已准备好按当前 LLM 配置执行解题分析。',
             bullets=bullets,
@@ -453,6 +572,8 @@ class AnalysisService:
     def _fallback_attribution(self, settings: LLMSettings, problem: ProblemDetail, submission: SubmissionResult) -> AnalysisResponse:
         bullets: list[str] = [f'题目：{problem.title}。', f'Verdict：{submission.verdict}。']
         line_refs: list[AnalysisLineRef] = []
+        primary_category = '执行异常'
+        secondary_category = '运行时错误'
         if submission.verdict == 'RE':
             bullets.extend([
                 f'运行时上下文：{submission.stderr_output or "检测到运行时异常。"}',
@@ -461,6 +582,8 @@ class AnalysisService:
             ])
             line_refs.append(AnalysisLineRef(line=7, message=submission.stderr_output or '优先检查这一段附近的运行时访问路径。', severity='error'))
         elif submission.verdict == 'WA':
+            primary_category = '答案错误'
+            secondary_category = '边界条件或状态转移偏差'
             bullets.extend([
                 '程序已经产出结果，主要偏差集中在输出与预期不一致。',
                 '建议优先打开 diff 面板，对照 failed case 检查边界条件和最终输出格式。',
@@ -468,14 +591,20 @@ class AnalysisService:
             ])
             line_refs.append(AnalysisLineRef(line=5, message='这一段通常承接状态转移或最终输出，适合优先排查。', severity='warning'))
         elif submission.verdict == 'CE':
+            primary_category = '编译错误'
+            secondary_category = '语法或入口配置问题'
             bullets.extend([
                 f'编译信息：{submission.compiler_output or "检测到编译错误。"}',
                 '优先修复语法、模板入口或语言特定 API 调用。',
             ])
             line_refs.append(AnalysisLineRef(line=1, message=submission.compiler_output or '先修复编译入口和语法错误。', severity='error'))
         elif submission.verdict == 'AC':
+            primary_category = '已通过'
+            secondary_category = '复盘建议'
             bullets.extend(['当前提交已经通过。', '下一步适合复盘复杂度、模板复用点和同类题迁移策略。'])
         else:
+            primary_category = '性能或执行状态问题'
+            secondary_category = '复杂度或执行超时'
             bullets.extend(['当前问题集中在执行时限或未完成状态。', '建议先缩小循环范围、检查复杂度和状态更新次数。'])
 
         return AnalysisResponse(
@@ -485,6 +614,8 @@ class AnalysisService:
             endpoint_url=settings.endpoint_url,
             execution_status='completed',
             status_reason='',
+            primary_category=primary_category,
+            secondary_category=secondary_category,
             title='错误归因',
             summary='系统已准备好按当前 LLM 配置执行错误归因。',
             bullets=bullets,
@@ -517,9 +648,83 @@ class AnalysisService:
             endpoint_url=settings.endpoint_url,
             execution_status='completed',
             status_reason='',
+            primary_category='',
+            secondary_category='',
             title='训练复盘',
             summary='系统已准备好按当前 LLM 配置执行复盘建议生成。',
             bullets=bullets,
             line_refs=[],
             verdict=submission.verdict,
+        )
+
+    def _fallback_hint(self, settings: LLMSettings, problem: ProblemDetail, hint_step: int, hint_strength: str, submission: SubmissionResult | None) -> AnalysisResponse:
+        step_names = ['读题澄清', '关键观察', '算法方向', '边界条件', '伪代码骨架', '代码风险点']
+        step_name = step_names[min(max(hint_step, 1), 6) - 1]
+        bullets = [
+            f'本步聚焦：{step_name}。',
+            f'题目标签线索：{", ".join(problem.tags) or problem.category_slug}。',
+            '先用样例手推一遍输入到输出的变化，再写出必须维护的状态。',
+        ]
+        if hint_strength == 'strong':
+            bullets.append('可以把关键状态、转移条件和最终答案位置先写成伪代码，再补语言细节。')
+        if submission is not None and submission.verdict != 'AC':
+            bullets.append(f'最近 Verdict 是 {submission.verdict}，优先围绕失败样例收缩排查范围。')
+
+        return AnalysisResponse(
+            analysis_type='hint',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
+            primary_category='训练提示',
+            secondary_category=step_name,
+            title=f'第 {hint_step} 步：{step_name}',
+            summary='系统已准备好按当前题目和训练上下文生成渐进式提示。',
+            bullets=bullets,
+            line_refs=[],
+            verdict=submission.verdict if submission is not None else None,
+        )
+
+    def _fallback_problem_analysis(self, settings: LLMSettings, problem: ProblemDetail) -> AnalysisResponse:
+        return AnalysisResponse(
+            analysis_type='problem_analysis',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
+            primary_category='题目解析',
+            secondary_category=problem.category_slug,
+            title='解题思路分析',
+            summary='先从输入规模和输出目标反推可用算法，再用样例验证关键状态或不变量。',
+            bullets=[
+                f'题型线索：{problem.category_slug or "基础算法"}。',
+                f'标签线索：{", ".join(problem.tags) or "暂无标签"}。',
+                '用约束判断复杂度上限，再选择可证明正确性的状态、贪心准则或数据结构。',
+                '实现前列出最小规模、重复值、极值和输出格式四类边界。',
+            ],
+            line_refs=[],
+            verdict=None,
+        )
+
+    def _fallback_problem_chat(self, settings: LLMSettings, problem: ProblemDetail, question: str) -> AnalysisResponse:
+        return AnalysisResponse(
+            analysis_type='problem_qa',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            execution_status='completed',
+            status_reason='',
+            primary_category='题目问答',
+            secondary_category=problem.category_slug,
+            title='解题思路问答',
+            summary=f'围绕“{question}”先回到题目目标、输入规模和样例变化来判断。',
+            bullets=[
+                '把问题拆成状态含义、状态转移、初始化和答案位置四部分。',
+                '如果在贪心和动态规划之间摇摆，优先寻找局部选择是否影响后续全局最优。',
+                '复杂度证明需要和约束规模对应，避免只描述直觉。',
+            ],
+            line_refs=[],
+            verdict=None,
         )

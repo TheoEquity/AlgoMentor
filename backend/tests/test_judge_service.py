@@ -27,7 +27,7 @@ class JudgeServiceTests(unittest.TestCase):
             category_slug='two-pointers',
             tags=['array'],
             supported_languages=['Python', 'C++', 'Java'],
-            status='published',
+            status='未开始',
             updated_at='2026-06-23T00:00:00Z',
             statement_markdown='Solve the sample problem correctly.',
             constraints_text='1 <= n <= 10^5',

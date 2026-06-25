@@ -4,7 +4,7 @@ export type ReviewSummary = {
   total_submissions: number
   wrong_submissions: number
   ac_submissions: number
-  top_error_type: ReviewErrorType | null
+  top_error_type: string | null
 }
 
 export type ReviewItem = {
@@ -18,7 +18,7 @@ export type ReviewItem = {
   language: 'Python' | 'C++' | 'Java'
   run_type: 'run' | 'submit'
   verdict: 'AC' | 'WA' | 'RE' | 'CE' | 'TLE' | 'PENDING'
-  error_type: ReviewErrorType
+  error_type: string
   runtime_ms: number
   memory_kb: number
   failed_case_summary: string

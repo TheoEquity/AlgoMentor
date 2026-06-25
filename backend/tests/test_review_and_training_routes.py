@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -48,6 +49,42 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
             created_at='2026-06-23T11:00:00Z',
             failed_input='(()\n',
         )
+        self._insert_attribution(1, '边界条件错误')
+        self._insert_attribution(3, '输入解析错误')
+
+    def _insert_attribution(self, submission_id: int, primary_category: str) -> None:
+        from core.db import get_connection
+
+        connection = get_connection(TEST_DATABASE_URL)
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                INSERT INTO error_attributions (
+                    submission_id, analysis_type, primary_category, secondary_category,
+                    summary, suggestion, bullets_json, line_refs_json,
+                    execution_status, status_reason, provider, model, endpoint_url,
+                    raw_response_json, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''',
+                (
+                    submission_id,
+                    'attribution',
+                    primary_category,
+                    '',
+                    'summary',
+                    'suggestion',
+                    json.dumps([]),
+                    json.dumps([]),
+                    'completed',
+                    '',
+                    'test',
+                    'test-model',
+                    'https://example.com',
+                    '{}',
+                    '2026-06-23T12:00:00Z',
+                ),
+            )
+        connection.close()
 
     def test_review_route_filters_wrong_submissions_and_company(self) -> None:
         payload = asyncio.run(
@@ -62,7 +99,7 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
 
         self.assertEqual(payload.summary.total_submissions, 1)
         self.assertEqual(payload.summary.wrong_submissions, 1)
-        self.assertEqual(payload.summary.top_error_type, 'WA')
+        self.assertEqual(payload.summary.top_error_type, '边界条件错误')
         self.assertEqual([item.verdict for item in payload.items], ['WA'])
         self.assertIn('Expected: 9', payload.items[0].failed_case_summary)
 
@@ -79,7 +116,7 @@ class ReviewAndTrainingRouteTests(unittest.TestCase):
 
         self.assertEqual(payload.summary.total_submissions, 1)
         self.assertEqual(payload.items[0].problem_id, 2)
-        self.assertEqual(payload.items[0].error_type, 'RE')
+        self.assertEqual(payload.items[0].error_type, '输入解析错误')
 
     def test_training_overview_returns_summary_buckets_and_recommendations(self) -> None:
         payload = asyncio.run(get_training_overview(repository=self.training_repository))

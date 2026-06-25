@@ -48,3 +48,26 @@ async def create_problem(
     repository: ProblemRepository = Depends(get_repository),
 ) -> ProblemDetail:
     return repository.create_problem(payload)
+
+
+@router.put('/{problem_id}', response_model=ProblemDetail)
+async def update_problem(
+    problem_id: int,
+    payload: ProblemCreate,
+    repository: ProblemRepository = Depends(get_repository),
+) -> ProblemDetail:
+    problem = repository.update_problem(problem_id, payload)
+    if problem is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+
+    return problem
+
+
+@router.delete('/{problem_id}', status_code=status.HTTP_204_NO_CONTENT)
+async def delete_problem(
+    problem_id: int,
+    repository: ProblemRepository = Depends(get_repository),
+) -> None:
+    deleted = repository.delete_problem(problem_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')

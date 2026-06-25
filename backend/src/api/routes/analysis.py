@@ -8,7 +8,7 @@ from config import Settings
 from repositories.llm_settings_repository import LLMSettingsRepository
 from repositories.problem_repository import ProblemRepository
 from repositories.submission_repository import SubmissionRepository
-from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, SolutionAnalysisRequest
+from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, HintAnalysisRequest, ProblemAnalysisRequest, ProblemChatRequest, SolutionAnalysisRequest
 from services.analysis_service import AnalysisService
 
 
@@ -92,6 +92,68 @@ async def analyze_solution_stream(
     return _stream_analysis_response(
         analysis_service.stream_solution_analysis(settings, api_key, problem, payload.language, payload.code_text),
     )
+
+
+@router.post('/hint', response_model=AnalysisResponse)
+async def analyze_hint(
+    payload: HintAnalysisRequest,
+    settings_repository: LLMSettingsRepository = Depends(get_settings_repository),
+    problem_repository: ProblemRepository = Depends(get_problem_repository),
+    submission_repository: SubmissionRepository = Depends(get_submission_repository),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+) -> AnalysisResponse:
+    settings = settings_repository.get_settings()
+    api_key = settings_repository.get_api_key()
+    problem = problem_repository.get_problem(payload.problem_id)
+    if problem is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+
+    submission = None
+    if payload.submission_id is not None:
+        submission = submission_repository.get_submission(payload.submission_id)
+
+    return analysis_service.generate_hint(
+        settings,
+        api_key,
+        problem,
+        payload.language,
+        payload.code_text,
+        payload.hint_step,
+        payload.hint_strength,
+        submission,
+    )
+
+
+@router.post('/problem', response_model=AnalysisResponse)
+async def analyze_problem(
+    payload: ProblemAnalysisRequest,
+    settings_repository: LLMSettingsRepository = Depends(get_settings_repository),
+    problem_repository: ProblemRepository = Depends(get_problem_repository),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+) -> AnalysisResponse:
+    settings = settings_repository.get_settings()
+    api_key = settings_repository.get_api_key()
+    problem = problem_repository.get_problem(payload.problem_id)
+    if problem is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+
+    return analysis_service.analyze_problem_thinking(settings, api_key, problem)
+
+
+@router.post('/problem/chat', response_model=AnalysisResponse)
+async def chat_problem(
+    payload: ProblemChatRequest,
+    settings_repository: LLMSettingsRepository = Depends(get_settings_repository),
+    problem_repository: ProblemRepository = Depends(get_problem_repository),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+) -> AnalysisResponse:
+    settings = settings_repository.get_settings()
+    api_key = settings_repository.get_api_key()
+    problem = problem_repository.get_problem(payload.problem_id)
+    if problem is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+
+    return analysis_service.chat_problem_thinking(settings, api_key, problem, payload.messages, payload.question)
 
 
 @router.post('/attribution', response_model=AnalysisResponse)

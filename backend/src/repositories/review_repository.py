@@ -45,9 +45,17 @@ class ReviewRepository:
                     s.id AS submission_id, s.problem_id, s.language, s.run_type, s.verdict,
                     s.runtime_ms, s.memory_kb, s.failed_input, s.failed_expected_output,
                     s.failed_actual_output, s.created_at,
-                    p.title, p.company, p.difficulty, p.category_slug, p.tags_json
+                    p.title, p.company, p.difficulty, p.category_slug, p.tags_json,
+                    ea.primary_category, ea.secondary_category
                 FROM submissions s
                 INNER JOIN problems p ON p.id = s.problem_id
+                LEFT JOIN LATERAL (
+                    SELECT primary_category, secondary_category
+                    FROM error_attributions
+                    WHERE submission_id = s.id AND analysis_type = 'attribution'
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                ) ea ON TRUE
                 {where_sql}
                 ORDER BY s.created_at DESC, s.id DESC
                 LIMIT 100
@@ -81,12 +89,24 @@ class ReviewRepository:
             language=row['language'],
             run_type=row['run_type'],
             verdict=row['verdict'],
-            error_type=row['verdict'],
+            error_type=ReviewRepository._build_error_type(row),
             runtime_ms=row['runtime_ms'],
             memory_kb=row['memory_kb'],
             failed_case_summary=ReviewRepository._build_failed_case_summary(row),
             created_at=row['created_at'],
         )
+
+    @staticmethod
+    def _build_error_type(row: dict) -> str:
+        primary_category = (row['primary_category'] or '').strip()
+        if primary_category:
+            return primary_category
+
+        secondary_category = (row['secondary_category'] or '').strip()
+        if secondary_category:
+            return secondary_category
+
+        return ''
 
     @staticmethod
     def _build_failed_case_summary(row: dict) -> str:

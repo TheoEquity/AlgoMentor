@@ -14,8 +14,8 @@ if str(SRC_DIR) not in sys.path:
 
 import json
 
-from api.routes.analysis import analyze_attribution, analyze_attribution_stream
-from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest
+from api.routes.analysis import analyze_attribution, analyze_attribution_stream, analyze_hint, analyze_problem, chat_problem
+from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, HintAnalysisRequest, ProblemAnalysisRequest, ProblemChatRequest
 from schemas.llm_settings import LLMSettings
 from schemas.problems import ExampleItem, ProblemDetail, ProblemTestCase
 from schemas.submissions import SubmissionCaseResult, SubmissionResult
@@ -108,6 +108,54 @@ class FakeAnalysisService:
             ),
         )
 
+    def generate_hint(self, settings, api_key, problem, language, code_text, hint_step, hint_strength, submission=None) -> AnalysisResponse:
+        self.calls.append((settings.provider, api_key, problem.id, f'hint-{hint_step}-{hint_strength}'))
+        return AnalysisResponse(
+            analysis_type='hint',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            primary_category='训练提示',
+            secondary_category='关键观察',
+            title='第 2 步：关键观察',
+            summary='先观察样例中的状态变化。',
+            bullets=['保留独立思考空间。'],
+            line_refs=[],
+            verdict=submission.verdict if submission is not None else None,
+        )
+
+    def analyze_problem_thinking(self, settings, api_key, problem) -> AnalysisResponse:
+        self.calls.append((settings.provider, api_key, problem.id, 'problem'))
+        return AnalysisResponse(
+            analysis_type='problem_analysis',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            primary_category='题目解析',
+            secondary_category=problem.category_slug,
+            title='解题思路分析',
+            summary='从约束反推复杂度。',
+            bullets=['再看样例验证状态。'],
+            line_refs=[],
+            verdict=None,
+        )
+
+    def chat_problem_thinking(self, settings, api_key, problem, messages, question) -> AnalysisResponse:
+        self.calls.append((settings.provider, api_key, problem.id, question))
+        return AnalysisResponse(
+            analysis_type='problem_qa',
+            provider=settings.provider,
+            model=settings.solution_model,
+            endpoint_url=settings.endpoint_url,
+            primary_category='题目问答',
+            secondary_category=problem.category_slug,
+            title='解题思路问答',
+            summary=f'回答：{question}',
+            bullets=['围绕状态定义解释。'],
+            line_refs=[],
+            verdict=None,
+        )
+
 
 async def collect_streaming_response(response) -> list[str]:
     chunks: list[str] = []
@@ -127,7 +175,7 @@ class AnalysisRouteTests(unittest.TestCase):
             category_slug='greedy',
             tags=['数组', '前后缀'],
             supported_languages=['Python', 'C++', 'Java'],
-            status='published',
+            status='未开始',
             updated_at='2026-06-23T16:00:00Z',
             statement_markdown='给定一个数组，求最大差值。',
             constraints_text='2 <= n <= 2 * 10^5',
@@ -247,6 +295,59 @@ class AnalysisRouteTests(unittest.TestCase):
         data_text = done_payload.split('data:', 1)[1].strip()
         parsed = json.loads(data_text)
         self.assertEqual(parsed['summary'], '流式结果已写回。')
+
+    def test_analyze_hint_uses_problem_submission_and_step_context(self) -> None:
+        service = FakeAnalysisService()
+        response = asyncio.run(
+            analyze_hint(
+                HintAnalysisRequest(
+                    problem_id=1,
+                    language='Python',
+                    code_text='def solve():\n    print(0)',
+                    hint_step=2,
+                    hint_strength='light',
+                    submission_id=42,
+                ),
+                settings_repository=self.settings_repository,
+                problem_repository=FakeProblemRepository(self.problem),
+                submission_repository=FakeSubmissionRepository(self.submission),
+                analysis_service=service,
+            )
+        )
+
+        self.assertEqual(response.analysis_type, 'hint')
+        self.assertEqual(response.verdict, 'RE')
+        self.assertEqual(service.calls, [('OpenAI Compatible', 'sk-test', 1, 'hint-2-light')])
+
+    def test_analyze_problem_returns_problem_thinking(self) -> None:
+        service = FakeAnalysisService()
+        response = asyncio.run(
+            analyze_problem(
+                ProblemAnalysisRequest(problem_id=1),
+                settings_repository=self.settings_repository,
+                problem_repository=FakeProblemRepository(self.problem),
+                analysis_service=service,
+            )
+        )
+
+        self.assertEqual(response.analysis_type, 'problem_analysis')
+        self.assertEqual(response.summary, '从约束反推复杂度。')
+        self.assertEqual(service.calls, [('OpenAI Compatible', 'sk-test', 1, 'problem')])
+
+    def test_chat_problem_returns_problem_qa(self) -> None:
+        service = FakeAnalysisService()
+        response = asyncio.run(
+            chat_problem(
+                ProblemChatRequest(problem_id=1, messages=[], question='为什么用动态规划？'),
+                settings_repository=self.settings_repository,
+                problem_repository=FakeProblemRepository(self.problem),
+                analysis_service=service,
+            )
+        )
+
+        self.assertEqual(response.analysis_type, 'problem_qa')
+        self.assertIn('为什么用动态规划？', response.summary)
+        self.assertEqual(service.calls, [('OpenAI Compatible', 'sk-test', 1, '为什么用动态规划？')])
 
 
 if __name__ == '__main__':

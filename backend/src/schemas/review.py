@@ -14,7 +14,7 @@ class ReviewSummary(BaseModel):
     total_submissions: int = Field(ge=0)
     wrong_submissions: int = Field(ge=0)
     ac_submissions: int = Field(ge=0)
-    top_error_type: ReviewErrorType | None = None
+    top_error_type: str | None = None
 
 
 class ReviewListItem(BaseModel):
@@ -28,7 +28,7 @@ class ReviewListItem(BaseModel):
     language: Language
     run_type: RunType
     verdict: Verdict
-    error_type: ReviewErrorType
+    error_type: str
     runtime_ms: int = Field(ge=0)
     memory_kb: int = Field(ge=0)
     failed_case_summary: str

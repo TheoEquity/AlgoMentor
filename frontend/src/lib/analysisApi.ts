@@ -1,4 +1,12 @@
-import type { AnalysisResult, AnalysisStreamMeta, AttributionAnalysisPayload, SolutionAnalysisPayload } from '../types/analysis'
+import type {
+  AnalysisResult,
+  AnalysisStreamMeta,
+  AttributionAnalysisPayload,
+  HintAnalysisPayload,
+  ProblemAnalysisPayload,
+  ProblemChatPayload,
+  SolutionAnalysisPayload,
+} from '../types/analysis'
 import { requestJSON } from './http'
 
 const API_BASE = '/api/v1'
@@ -185,6 +193,27 @@ export async function analyzeAttribution(payload: AttributionAnalysisPayload): P
 
 export async function analyzeReview(payload: AttributionAnalysisPayload): Promise<AnalysisResult> {
   return requestJSON<AnalysisResult>('/analysis/review', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function analyzeHint(payload: HintAnalysisPayload): Promise<AnalysisResult> {
+  return requestJSON<AnalysisResult>('/analysis/hint', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function analyzeProblem(payload: ProblemAnalysisPayload): Promise<AnalysisResult> {
+  return requestJSON<AnalysisResult>('/analysis/problem', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function chatProblem(payload: ProblemChatPayload): Promise<AnalysisResult> {
+  return requestJSON<AnalysisResult>('/analysis/problem/chat', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

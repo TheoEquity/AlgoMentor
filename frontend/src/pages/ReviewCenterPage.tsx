@@ -57,6 +57,10 @@ function getAnalysisStatusClassName(status: string): string {
   return 'analysis-status-badge completed'
 }
 
+function formatReviewTime(value: string): string {
+  return value.replace('T', ' ').replace('Z', '').slice(0, 16)
+}
+
 export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
   const [response, setResponse] = useState<ReviewListResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -218,7 +222,7 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
                     <th>题目</th>
                     <th>语言</th>
                     <th>动作</th>
-                    <th>Verdict</th>
+                    <th>判题结果</th>
                     <th>错误类型</th>
                     <th>失败摘要</th>
                     <th>最近训练</th>
@@ -246,12 +250,12 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
                         <span className={`status-badge ${verdictClassName(item.verdict)}`}>{item.verdict}</span>
                       </td>
                       <td>
-                        <span className={`status-badge ${verdictClassName(item.error_type)}`}>{item.error_type}</span>
+                        <span className={`status-badge ${item.error_type ? 'review' : 'wa'}`}>{item.error_type || '待归因'}</span>
                       </td>
                       <td>
                         <div className="review-summary-cell">{item.failed_case_summary}</div>
                       </td>
-                      <td>{item.created_at.replace('T', ' ').replace('Z', '')}</td>
+                      <td>{formatReviewTime(item.created_at)}</td>
                        <td>
                           <button type="button" className="link-button" onClick={() => onOpenProblem(item.problem_id)}>
                             继续训练
@@ -279,7 +283,7 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
             <div>
               <strong>复盘详情</strong>
               <span>
-                #{selectedItem.submission_id} / {selectedItem.title} / {selectedItem.created_at.replace('T', ' ').replace('Z', '')}
+                #{selectedItem.submission_id} / {selectedItem.title} / {formatReviewTime(selectedItem.created_at)}
               </span>
             </div>
             <div className="button-row">
