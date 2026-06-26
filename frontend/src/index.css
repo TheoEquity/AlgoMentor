@@ -835,7 +835,8 @@ a {
 }
 
 .parse-textarea {
-  min-height: 420px;
+  width: 100%;
+  min-height: 600px;
   font-family: var(--font-mono, 'SF Mono', 'Fira Code', monospace);
   font-size: 0.875rem;
   line-height: 1.6;
