@@ -841,11 +841,14 @@ class AnalysisService:
         if examples:
             examples_section = '\n\n## 样例\n\n'
             for i, ex in enumerate(examples, 1):
+                explanation = ex['explanation']
+                if '\n' in explanation:
+                    explanation = '\n\n'.join(line.strip() for line in explanation.split('\n') if line.strip())
                 examples_section += f'### 样例 {i}\n\n'
                 examples_section += f'**输入：**\n```\n{ex["input"]}\n```\n\n'
                 examples_section += f'**输出：**\n```\n{ex["output"]}\n```\n'
-                if ex['explanation']:
-                    examples_section += f'**说明：**\n{ex["explanation"]}\n\n'
+                if explanation:
+                    examples_section += f'**说明：**\n{explanation}\n\n'
             markdown = markdown.strip() + examples_section
 
         return ParsedProblemResult(
