@@ -8,7 +8,7 @@ from config import Settings
 from repositories.llm_settings_repository import LLMSettingsRepository
 from repositories.problem_repository import ProblemRepository
 from repositories.submission_repository import SubmissionRepository
-from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, HintAnalysisRequest, ProblemAnalysisRequest, ProblemChatRequest, SolutionAnalysisRequest
+from schemas.analysis import AnalysisResponse, AttributionAnalysisRequest, HintAnalysisRequest, ParsedProblemResult, ParseProblemRequest, ProblemAnalysisRequest, ProblemChatRequest, SolutionAnalysisRequest
 from services.analysis_service import AnalysisService
 
 
@@ -250,3 +250,14 @@ async def analyze_review_stream(
         submission_repository=submission_repository,
         submission_id=submission.id,
     )
+
+
+@router.post('/parse-problem', response_model=ParsedProblemResult)
+async def parse_problem_text(
+    payload: ParseProblemRequest,
+    settings_repository: LLMSettingsRepository = Depends(get_settings_repository),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+) -> ParsedProblemResult:
+    settings = settings_repository.get_settings()
+    api_key = settings_repository.get_api_key()
+    return analysis_service.parse_problem_text(settings, api_key, payload.raw_text)

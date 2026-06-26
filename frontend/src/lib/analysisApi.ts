@@ -6,6 +6,7 @@ import type {
   ProblemAnalysisPayload,
   ProblemChatPayload,
   SolutionAnalysisPayload,
+  ParsedProblemResult,
 } from '../types/analysis'
 import { requestJSON } from './http'
 
@@ -216,6 +217,13 @@ export async function chatProblem(payload: ProblemChatPayload): Promise<Analysis
   return requestJSON<AnalysisResult>('/analysis/problem/chat', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export async function parseProblemText(rawText: string): Promise<ParsedProblemResult> {
+  return requestJSON<ParsedProblemResult>('/analysis/parse-problem', {
+    method: 'POST',
+    body: JSON.stringify({ raw_text: rawText }),
   })
 }
 

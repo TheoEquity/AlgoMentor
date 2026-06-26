@@ -5,6 +5,7 @@ import type { NavigationKey } from './components/MainSidebar'
 import { getProblem } from './lib/problemApi'
 import { listCategories } from './lib/categoryApi'
 import { ProblemDetailPage } from './pages/ProblemDetailPage'
+import { ProblemCreatePage } from './pages/ProblemCreatePage'
 import { ProblemLibraryPage } from './pages/ProblemLibraryPage'
 import { ProblemOverviewPage } from './pages/ProblemOverviewPage'
 import { ReviewCenterPage } from './pages/ReviewCenterPage'
@@ -23,6 +24,11 @@ type AppRouteState = {
 
 function readRouteFromLocation(): AppRouteState {
   const pathname = window.location.pathname
+
+  if (pathname === '/problems/create') {
+    return { activeNav: 'library', selectedProblemId: null, problemMode: 'overview' }
+  }
+
   const problemMatch = pathname.match(/^\/problems\/(\d+)(?:\/(training))?$/)
 
   if (problemMatch) {
@@ -118,6 +124,7 @@ function App() {
 
   const isWorkspace = activeNav === 'library' && selectedProblemId !== null
   const isLibrary = activeNav === 'library' && selectedProblemId === null
+  const isCreatePage = window.location.pathname === '/problems/create'
   const categoryNameBySlug = new Map(categories.map((category) => [category.slug, category.name]))
 
   const applyRoute = (route: AppRouteState) => {
@@ -141,7 +148,14 @@ function App() {
       activeNav={activeNav}
       onNavigate={handleNavigate}
     >
-      {isLibrary ? (
+      {isCreatePage ? (
+        <ProblemCreatePage
+          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })}
+          onProblemCreated={(problemId) => {
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
+          }}
+        />
+      ) : isLibrary ? (
         <ProblemLibraryPage
           onOpenProblem={(problemId) => {
             navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })

@@ -277,12 +277,11 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               type="button"
               className="button primary"
               onClick={() => {
-                setShowCreatePanel((current) => !current)
-                setCreateError('')
-                setCreateSuccess('')
+                window.history.pushState({}, '', '/problems/create')
+                window.dispatchEvent(new PopStateEvent('popstate'))
               }}
             >
-              {showCreatePanel ? '收起录题' : '手工录题'}
+              新增题目
             </button>
           </div>
         </div>

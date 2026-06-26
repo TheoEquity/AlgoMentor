@@ -63,3 +63,29 @@ export type ProblemChatPayload = {
   messages: ProblemChatMessage[]
   question: string
 }
+
+export type ParsedExample = {
+  input: string
+  output: string
+  explanation: string
+}
+
+export type ParsedProblemResult = {
+  slug: string
+  title: string
+  company: string
+  difficulty: string
+  category_slug: string
+  statement_markdown: string
+  tags: string[]
+  time_limit_ms: number
+  memory_limit_kb: number
+  source: string
+  source_type: string
+  frequency: string
+  year: number | null
+  source_ref: string
+  external_id: string
+  examples: ParsedExample[]
+  analysis: string
+}

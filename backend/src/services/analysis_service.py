@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
-from schemas.analysis import AnalysisLineRef, AnalysisResponse, ProblemChatMessage
+from schemas.analysis import AnalysisLineRef, AnalysisResponse, ParsedProblemResult, ProblemChatMessage
 from schemas.llm_settings import LLMSettings
 from schemas.problems import ProblemDetail
 from schemas.submissions import SubmissionResult
@@ -719,7 +719,7 @@ class AnalysisService:
             primary_category='题目问答',
             secondary_category=problem.category_slug,
             title='解题思路问答',
-            summary=f'围绕“{question}”先回到题目目标、输入规模和样例变化来判断。',
+            summary=f'围绕"{question}"先回到题目目标、输入规模和样例变化来判断。',
             bullets=[
                 '把问题拆成状态含义、状态转移、初始化和答案位置四部分。',
                 '如果在贪心和动态规划之间摇摆，优先寻找局部选择是否影响后续全局最优。',
@@ -727,4 +727,112 @@ class AnalysisService:
             ],
             line_refs=[],
             verdict=None,
+        )
+
+    def parse_problem_text(self, settings: LLMSettings, api_key: str, raw_text: str) -> ParsedProblemResult:
+        prompt = self._build_parse_prompt(raw_text)
+        try:
+            payload = self.client.generate_json(settings, api_key, settings.solution_model, settings.solution_temperature, prompt)
+        except LLMClientError:
+            return self._fallback_parse(settings, raw_text)
+        return self._build_parse_result(settings, payload)
+
+    def _build_parse_prompt(self, raw_text: str) -> str:
+        return (
+            '你是一个算法竞赛题目结构化的专家。请将以下原始题目文本解析为结构化的 JSON 字段。\n\n'
+            '要求：\n'
+            '1. slug 使用英文小写连字符，从标题翻译。\n'
+            '2. title 保留原标题。\n'
+            '3. company 从上下文中识别公司名（如华为、字节跳动、腾讯、阿里巴巴等），无法识别则为空字符串。\n'
+            '4. difficulty 必须是 Easy / Medium / Hard 之一。\n'
+            '5. category_slug 必须从以下列表中选最匹配的：two-pointers, sliding-window, hashing, binary-search, prefix-sum, intervals, matrix-grid, linked-list, stack-queue, monotonic-stack, heap-priority-queue, tree, graphs, backtracking, dynamic-programming, greedy, bit-manipulation, simulation。\n'
+            '6. statement_markdown 必须整合为完整的 Markdown 正文，包含：题目标题(##)、题目描述、输入格式、输出格式、约束条件、补充说明、样例(含输入输出和解释)。所有数学公式使用 $LaTeX$ 语法。\n'
+            '7. tags 从原文提取最多 5 个中文标签。\n'
+            '8. time_limit_ms 从原文提取时间限制（默认 2000）。\n'
+            '9. memory_limit_kb 从原文提取空间限制 MB 数乘以 1024（默认 262144）。\n'
+            '10. source 原文来源（如牛客、Leetcode、手工等）。\n'
+            '11. source_type 原文来源类型（如牛客、Leetcode、manual）。\n'
+            '12. frequency 根据公司出现频率推断（高/中/低），默认中。\n'
+            '13. year 从原文提取年份，无法识别则为 null。\n'
+            '14. source_ref 来源引用说明。\n'
+            '15. external_id 外部编号（若有）。\n'
+            '16. examples 提取所有样例，每个包含 input/output/explanation 三个字符串字段。\n'
+            '17. analysis 简要分析此题考察的算法点和解题思路（1-2 句）。\n\n'
+            '返回 JSON 格式，不要包含 markdown 代码块标记。\n\n'
+            f'原始文本：\n{raw_text}'
+        )
+
+    def _build_parse_result(self, settings: LLMSettings, payload: dict) -> ParsedProblemResult:
+        examples = []
+        for item in payload.get('examples', []):
+            if isinstance(item, dict):
+                examples.append({
+                    'input': str(item.get('input', '')).strip(),
+                    'output': str(item.get('output', '')).strip(),
+                    'explanation': str(item.get('explanation', '')).strip(),
+                })
+
+        valid_difficulties = {'Easy', 'Medium', 'Hard'}
+        difficulty = str(payload.get('difficulty', 'Medium'))
+        if difficulty not in valid_difficulties:
+            difficulty = 'Medium'
+
+        valid_categories = {
+            'two-pointers', 'sliding-window', 'hashing', 'binary-search',
+            'prefix-sum', 'intervals', 'matrix-grid', 'linked-list',
+            'stack-queue', 'monotonic-stack', 'heap-priority-queue',
+            'tree', 'graphs', 'backtracking', 'dynamic-programming',
+            'greedy', 'bit-manipulation', 'simulation',
+        }
+        category = str(payload.get('category_slug', 'simulation')).strip()
+        if category not in valid_categories:
+            category = 'simulation'
+
+        tags = payload.get('tags', [])
+        if isinstance(tags, list):
+            tags = [str(t).strip() for t in tags[:5]]
+        else:
+            tags = []
+
+        return ParsedProblemResult(
+            slug=str(payload.get('slug', '')).strip()[:64],
+            title=str(payload.get('title', '')).strip(),
+            company=str(payload.get('company', '')).strip(),
+            difficulty=difficulty,
+            category_slug=category,
+            statement_markdown=str(payload.get('statement_markdown', '')).strip(),
+            tags=tags,
+            time_limit_ms=int(payload.get('time_limit_ms', 2000)),
+            memory_limit_kb=int(payload.get('memory_limit_kb', 262144)),
+            source=str(payload.get('source', '手工')).strip(),
+            source_type=str(payload.get('source_type', 'manual')).strip(),
+            frequency=str(payload.get('frequency', '中')).strip(),
+            year=int(payload['year']) if payload.get('year') is not None else None,
+            source_ref=str(payload.get('source_ref', '')).strip(),
+            external_id=str(payload.get('external_id', '')).strip(),
+            examples=examples,
+            analysis=str(payload.get('analysis', '')).strip(),
+        )
+
+    def _fallback_parse(self, settings: LLMSettings, raw_text: str) -> ParsedProblemResult:
+        lines = [line.strip() for line in raw_text.strip().split('\n') if line.strip()]
+        title = lines[0] if lines else '未命名题目'
+        return ParsedProblemResult(
+            slug='',
+            title=title,
+            company='',
+            difficulty='Medium',
+            category_slug='simulation',
+            statement_markdown=raw_text.strip(),
+            tags=[],
+            time_limit_ms=2000,
+            memory_limit_kb=262144,
+            source='手工',
+            source_type='manual',
+            frequency='中',
+            year=None,
+            source_ref='',
+            external_id='',
+            examples=[],
+            analysis='AI 解析不可用，已将原始文本作为题面。',
         )

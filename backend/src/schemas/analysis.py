@@ -86,3 +86,35 @@ class ErrorAttributionRecord(BaseModel):
     endpoint_url: str = ''
     raw_response_json: str = ''
     created_at: str = ''
+
+
+class ParseProblemRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    raw_text: str = Field(min_length=10)
+
+
+class ParsedExample(BaseModel):
+    input: str
+    output: str
+    explanation: str = ''
+
+
+class ParsedProblemResult(BaseModel):
+    slug: str = ''
+    title: str = ''
+    company: str = ''
+    difficulty: str = 'Medium'
+    category_slug: str = ''
+    statement_markdown: str = ''
+    tags: list[str] = []
+    time_limit_ms: int = 2000
+    memory_limit_kb: int = 262144
+    source: str = '手工'
+    source_type: str = 'manual'
+    frequency: str = '中'
+    year: int | None = None
+    source_ref: str = ''
+    external_id: str = ''
+    examples: list[ParsedExample] = []
+    analysis: str = ''
