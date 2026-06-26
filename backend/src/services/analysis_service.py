@@ -732,7 +732,7 @@ class AnalysisService:
     def parse_problem_text(self, settings: LLMSettings, api_key: str, raw_text: str) -> ParsedProblemResult:
         result = self._parse_rule_based(raw_text)
         if result and self._needs_formula_enrichment(raw_text):
-            result = self._enrich_formulas(settings, api_key, result)
+            result = self._enrich_formulas(result)
         if result:
             return result
         prompt = self._build_parse_prompt(raw_text)
@@ -754,27 +754,70 @@ class AnalysisService:
         ]
         return any(re.search(p, text) for p in patterns)
 
-    def _enrich_formulas(self, settings: LLMSettings, api_key: str, result: ParsedProblemResult) -> ParsedProblemResult:
-        prompt = (
-            '将以下算法题 Markdown 中所有纯文本数学公式转为标准 LaTeX（用 $ 包裹）。'
-            '只输出转换后的完整 Markdown，不要解释，不要改动代码块(```)内的任何内容。\n\n'
-            '转换规则（严格执行）：\n'
-            '- 变量/数字组合如 n、m、h、a_i、x^2、2^k → $n$、$m$、$h$、$a_i$、$x^2$、$2^k$\n'
-            '- 分数 1/2、1/(n+1)、a/b → $\\frac{1}{2}$、$\\frac{1}{n+1}$、$\\frac{a}{b}$\n'
-            '- 求和 Σ(i=1..n) → $\\sum_{i=1}^{n}$\n'
-            '- 组合数 C(n,k) → $\\binom{n}{k}$\n'
-            '- 概率 P(X=k) → $P(X=k)$，期望 E[X] → $E[X]$\n'
-            '- 上标 x^{k} → $x^{k}$，下标 x_{i} → $x_{i}$\n'
-            '- 乘号 * → $\\cdot$，但仅在数学上下文中\n'
-            '- 如果一段文字是纯数学表达式（如 ∑(1/C(n,k))），整段用 $$ 包裹成块级公式\n\n'
-            f'题目：\n{result.statement_markdown}'
-        )
-        try:
-            raw = self.client.generate_text(settings, api_key, settings.solution_model, 0.3, prompt)
-            if raw and len(raw) >= 10:
-                result.statement_markdown = raw.strip()
-        except LLMClientError:
-            pass
+    def _enrich_formulas(self, result: ParsedProblemResult) -> ParsedProblemResult:
+        import re
+
+        md = result.statement_markdown
+
+        def _latex_inline(text: str) -> str:
+            return f'${text}$'
+
+        def _protect_code_blocks(text: str) -> tuple[str, list[str]]:
+            blocks: list[str] = []
+            def _save(m: re.Match) -> str:
+                blocks.append(m.group(0))
+                return f'<<<CODEBLOCK{len(blocks) - 1}>>>'
+            protected = re.sub(r'```[\s\S]*?```', _save, text)
+            return protected, blocks
+
+        def _restore(text: str, blocks: list[str]) -> str:
+            for i, blk in enumerate(blocks):
+                text = text.replace(f'<<<CODEBLOCK{i}>>>', blk)
+            return text
+
+        protected, code_blocks = _protect_code_blocks(md)
+
+        # 1. 组合数 C(n,k) / C(n, k) → $\binom{n}{k}$
+        protected = re.sub(r'\bC\s*\(\s*(\w[\w\s,]*?)\s*\)', lambda m: _latex_inline(r'\binom{' + re.sub(r'\s*,\s*', '}{', m.group(1).strip()) + '}'), protected)
+
+        # 2. P(X=k) → $P(X=k)$
+        protected = re.sub(r'\bP\s*\(\s*([^)]+?)\s*\)', lambda m: _latex_inline('P(' + m.group(1).strip() + ')'), protected)
+
+        # 3. E[X] → $E[X]$
+        protected = re.sub(r'\bE\s*\[([^\]]+)\]', lambda m: _latex_inline('E[' + m.group(1).strip() + ']'), protected)
+
+        # 4. 分数 a/b (a,b为数字或简单变量)
+        protected = re.sub(r'(?<![$\w\\])(\w+)\s*/\s*(\w+)(?![$\w}])', lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2) + '}'), protected)
+
+        # 5. x^{k} / a^{b} → $x^{k}$
+        protected = re.sub(r'(?<![$\w])(\w+)\^\{(\w+)\}(?![$\w}])', lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
+
+        # 6. x^2 → $x^2$ (单数字指数)
+        protected = re.sub(r'(?<![$\w\\])(\w+)\^(\d)(?![$\w}])', lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
+
+        # 7. x_i → $x_i$
+        protected = re.sub(r'(?<![$\w])(\w+)_(\w+)(?![$\w}])', lambda m: _latex_inline(m.group(1) + '_' + m.group(2)), protected)
+
+        # 8. Σ → $\sum$
+        protected = re.sub(r'Σ', lambda m: _latex_inline(r'\sum'), protected)
+
+        # 9. ∏ → $\prod$
+        protected = re.sub(r'∏', lambda m: _latex_inline(r'\prod'), protected)
+
+        # 10. √x → $\sqrt{x}$
+        protected = re.sub(r'√(\w+)', lambda m: _latex_inline(r'\sqrt{' + m.group(1) + '}'), protected)
+
+        # 11. ≤ ≥ ≠ ≈ ∞
+        protected = re.sub(r'≤', lambda m: _latex_inline(r'\leq'), protected)
+        protected = re.sub(r'≥', lambda m: _latex_inline(r'\geq'), protected)
+        protected = re.sub(r'≠', lambda m: _latex_inline(r'\neq'), protected)
+        protected = re.sub(r'≈', lambda m: _latex_inline(r'\approx'), protected)
+        protected = re.sub(r'∞', lambda m: _latex_inline(r'\infty'), protected)
+
+        # 12. 数学中文后紧跟的数学表达式 (如: 概率 P(X=k))
+        protected = re.sub(r'(概率|期望|方差)\s*([=＝]\s*[\w\d\s\+\-\*/\(\)\^\.]+)', lambda m: f'{m.group(1)} {_latex_inline(m.group(2).strip())}', protected)
+
+        result.statement_markdown = _restore(protected, code_blocks)
         return result
 
     def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
