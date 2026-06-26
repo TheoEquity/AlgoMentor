@@ -9,9 +9,10 @@ import type { ProblemCreatePayload, ProblemListItem } from '../types/problem'
 
 type ProblemLibraryPageProps = {
   onOpenProblem: (problemId: number) => void
+  onCreateProblem: () => void
 }
 
-export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
+export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLibraryPageProps) {
   const [problems, setProblems] = useState<ProblemListItem[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [categories, setCategories] = useState<ProblemCategory[]>([])
@@ -276,10 +277,7 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
             <button
               type="button"
               className="button primary"
-              onClick={() => {
-                window.history.pushState({}, '', '/problems/create')
-                window.dispatchEvent(new PopStateEvent('popstate'))
-              }}
+              onClick={onCreateProblem}
             >
               新增题目
             </button>

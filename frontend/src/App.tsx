@@ -24,11 +24,6 @@ type AppRouteState = {
 
 function readRouteFromLocation(): AppRouteState {
   const pathname = window.location.pathname
-
-  if (pathname === '/problems/create') {
-    return { activeNav: 'library', selectedProblemId: null, problemMode: 'overview' }
-  }
-
   const problemMatch = pathname.match(/^\/problems\/(\d+)(?:\/(training))?$/)
 
   if (problemMatch) {
@@ -73,6 +68,7 @@ function App() {
   const [categories, setCategories] = useState<ProblemCategory[]>([])
   const [problemError, setProblemError] = useState('')
   const [problemReloadSeed, setProblemReloadSeed] = useState(0)
+  const [createPageOpen, setCreatePageOpen] = useState(false)
 
   useEffect(() => {
     if (selectedProblemId === null) {
@@ -124,7 +120,6 @@ function App() {
 
   const isWorkspace = activeNav === 'library' && selectedProblemId !== null
   const isLibrary = activeNav === 'library' && selectedProblemId === null
-  const isCreatePage = window.location.pathname === '/problems/create'
   const categoryNameBySlug = new Map(categories.map((category) => [category.slug, category.name]))
 
   const applyRoute = (route: AppRouteState) => {
@@ -148,10 +143,11 @@ function App() {
       activeNav={activeNav}
       onNavigate={handleNavigate}
     >
-      {isCreatePage ? (
+      {createPageOpen ? (
         <ProblemCreatePage
-          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })}
+          onBack={() => setCreatePageOpen(false)}
           onProblemCreated={(problemId) => {
+            setCreatePageOpen(false)
             navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
           }}
         />
@@ -160,6 +156,7 @@ function App() {
           onOpenProblem={(problemId) => {
             navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
           }}
+          onCreateProblem={() => setCreatePageOpen(true)}
         />
       ) : isWorkspace && selectedProblem && problemMode === 'overview' ? (
         <ProblemOverviewPage
