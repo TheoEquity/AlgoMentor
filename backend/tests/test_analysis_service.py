@@ -10,7 +10,7 @@ SRC_DIR = Path(__file__).resolve().parents[1] / 'src'
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from schemas.analysis import AnalysisResponse
+from schemas.analysis import AnalysisResponse, ParsedProblemResult
 from schemas.llm_settings import LLMSettings
 from schemas.problems import ExampleItem, ProblemDetail, ProblemTestCase
 from schemas.submissions import SubmissionCaseResult, SubmissionResult
@@ -189,6 +189,38 @@ class AnalysisServiceTests(unittest.TestCase):
         self.assertEqual(final_response.summary, '逐步输出')
         self.assertEqual(final_response.bullets, ['先看边界'])
         self.assertEqual(final_response.line_refs[0].line, 3)
+
+    def test_formula_enrichment_preserves_field_names_and_existing_math(self) -> None:
+        result = ParsedProblemResult(
+            title='硬盘寿命预测',
+            statement_markdown='''## 题目描述
+
+概率： P(y=1) = 1/(1+e^{-z})
+
+其中 z = w0 + Σ i = 1 5 w i x i
+
+若 $P(y=1)$ ≥ 0.5 则输出 1。
+
+## 输入格式
+
+每行一个样本 device_id,writes,reads,avg_write_ms,avg_read_ms,years,status
+
+## 样例
+
+**输入：**
+```
+device_id,writes
+```
+''',
+        )
+
+        enriched = self.service._enrich_formulas(result).statement_markdown
+
+        self.assertIn('$P(y=1) = \\frac{1}{1+e^{-z}}$', enriched)
+        self.assertIn('$z = w_0 + \\sum_{i=1}^{5} w_i x_i$', enriched)
+        self.assertIn('$P(y=1) \\geq 0.5$', enriched)
+        self.assertIn('`device_id,writes,reads,avg_write_ms,avg_read_ms,years,status`', enriched)
+        self.assertIn('```\ndevice_id,writes\n```', enriched)
 
 
 if __name__ == '__main__':
