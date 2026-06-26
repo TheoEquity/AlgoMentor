@@ -24,6 +24,15 @@ class LLMClient:
 
         return self._call_openai_compatible(settings, api_key, model, prompt, temperature)
 
+    def generate_text(self, settings: LLMSettings, api_key: str, model: str, prompt: str, temperature: float) -> str:
+        if not settings.enabled:
+            raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
+        if not api_key:
+            raise LLMClientError('系统管理中尚未配置 API Key，当前无法发起真实模型请求。')
+        if settings.provider == 'Anthropic Compatible':
+            return self._call_anthropic_text(settings, api_key, model, prompt, temperature)
+        return self._call_openai_text(settings, api_key, model, prompt, temperature)
+
     def stream_text(self, settings: LLMSettings, api_key: str, model: str, prompt: str, temperature: float) -> Iterator[str]:
         if not settings.enabled:
             raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
@@ -71,6 +80,58 @@ class LLMClient:
         response = self._post_json(url, headers, payload)
         content = response['choices'][0]['message']['content']
         return self._parse_json_content(content)
+
+    def _call_openai_text(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        prompt: str,
+        temperature: float,
+    ) -> str:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/chat/completions'):
+            url = f'{url}/chat/completions'
+        payload = {
+            'model': model,
+            'temperature': temperature,
+            'messages': [
+                {'role': 'user', 'content': prompt},
+            ],
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        }
+        response = self._post_json(url, headers, payload)
+        return response['choices'][0]['message']['content']
+
+    def _call_anthropic_text(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        prompt: str,
+        temperature: float,
+    ) -> str:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/messages'):
+            url = f'{url}/messages'
+        payload = {
+            'model': model,
+            'temperature': temperature,
+            'max_tokens': 8192,
+            'messages': [
+                {'role': 'user', 'content': prompt},
+            ],
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+        }
+        response = self._post_json(url, headers, payload)
+        return response['content'][0]['text']
 
     def _stream_openai_compatible(
         self,

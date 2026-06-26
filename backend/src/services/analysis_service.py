@@ -731,6 +731,8 @@ class AnalysisService:
 
     def parse_problem_text(self, settings: LLMSettings, api_key: str, raw_text: str) -> ParsedProblemResult:
         result = self._parse_rule_based(raw_text)
+        if result and self._needs_formula_enrichment(raw_text):
+            result = self._enrich_formulas(settings, api_key, result)
         if result:
             return result
         prompt = self._build_parse_prompt(raw_text)
@@ -739,6 +741,37 @@ class AnalysisService:
         except LLMClientError:
             return self._fallback_parse(settings, raw_text)
         return self._build_parse_result(settings, payload)
+
+    def _needs_formula_enrichment(self, text: str) -> bool:
+        import re
+        math_indicators = [
+            'Σ', '∏', '∫', '√', '∞', '≤', '≥', '≠', '≈',
+            '概率', '期望', '方差', '组合数', '排列', '阶乘',
+        ]
+        return any(re.search(re.escape(p), text) for p in math_indicators)
+
+    def _enrich_formulas(self, settings: LLMSettings, api_key: str, result: ParsedProblemResult) -> ParsedProblemResult:
+        prompt = (
+            '你是一个 LaTeX 排版专家。下面是一道算法题的 Markdown 题面，其中包含一些用纯文本表达的数学公式。'
+            '请将题面中所有数学表达式转换为标准的 $LaTeX$ 行内公式或块级公式，但保持其他所有内容（标题、段落结构、样例代码块）完全不变。\n\n'
+            '要求：\n'
+            '1. 普通变量和数字用 $x$ 包裹。\n'
+            '2. 分数如 1/2 改为 $\\frac{1}{2}$。\n'
+            '3. 求和符号 Σ 改为 $\\sum$，连乘 ∏ 改为 $\\prod$。\n'
+            '4. 组合数 C(n,k) 改为 $\\binom{n}{k}$ 或 $C(n,k)$。\n'
+            '5. 概率 P(...) 保持不变但加 $ 包裹。\n'
+            '6. 上标 x^2 改为 $x^2$，下标 x_i 改为 $x_i$。\n'
+            '7. 代码块（```...```）内不修改。\n'
+            '8. 只输出转换后的完整 Markdown，不要任何解释。\n\n'
+            f'原始 Markdown：\n{result.statement_markdown}'
+        )
+        try:
+            raw = self.client.generate_text(settings, api_key, settings.solution_model, 0.3, prompt)
+            if raw and len(raw) >= 10:
+                result.statement_markdown = raw.strip()
+        except LLMClientError:
+            pass
+        return result
 
     def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
         import re
