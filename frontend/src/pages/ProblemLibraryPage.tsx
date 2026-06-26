@@ -32,7 +32,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     category_slug: '',
     difficulty: 'Medium' as 'Easy' | 'Medium' | 'Hard',
     statement_markdown: '',
-    tags_text: '',
     source_type: 'manual',
     source: '手工',
     frequency: '中',
@@ -71,7 +70,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       category_slug: '',
       difficulty: 'Medium',
       statement_markdown: '',
-      tags_text: '',
       source_type: 'manual',
       source: '手工',
       frequency: '中',
@@ -93,11 +91,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     setCreateError('')
     setCreateSuccess('')
 
-    const tags = form.tags_text
-      .split(/[，,]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-
     const payload: ProblemCreatePayload = {
       slug: form.slug.trim(),
       title: form.title.trim(),
@@ -106,7 +99,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       difficulty: form.difficulty,
       statement_markdown: form.statement_markdown.trim(),
       constraints_text: '',
-      tags,
+      tags: ['未分类'],
       time_limit_ms: Number(form.time_limit_ms) || 2000,
       memory_limit_kb: Number(form.memory_limit_kb) || 262144,
       examples: [],
@@ -166,8 +159,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       const matchesSearch =
         searchText.length === 0 ||
         problem.title.includes(searchText) ||
-        problem.company.includes(searchText) ||
-        problem.tags.some((tag) => tag.includes(searchText))
+        problem.company.includes(searchText)
 
       const matchesCompany = company === 'all' || problem.company === company
       const matchesCategory = categorySlug === 'all' || problem.category_slug === categorySlug
@@ -326,14 +318,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                 <option value="Hard">Hard</option>
               </select>
             </label>
-            <label className="settings-field">
-              <span>标签</span>
-              <input
-                value={form.tags_text}
-                onChange={(event) => handleCreateField('tags_text', event.target.value)}
-                placeholder="数组, 前缀和, 双指针"
-              />
-            </label>
             <label className="settings-field settings-field-full">
               <span>题目正文</span>
               <textarea
@@ -435,7 +419,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
               <tr>
                 <th>题目</th>
                 <th>题型</th>
-                <th className="problem-tags-column">标签</th>
                 <th>公司</th>
                 <th>难度</th>
                 <th>频率</th>
@@ -459,15 +442,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                     </div>
                   </td>
                   <td>{categoryNameBySlug.get(problem.category_slug) || problem.category_slug || '-'}</td>
-                  <td className="problem-tags-column">
-                    <div className="tag-list">
-                      {problem.tags.map((tag) => (
-                        <span key={tag} className="tag-badge">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
                   <td>{problem.company}</td>
                   <td>{problem.difficulty}</td>
                   <td>{problem.frequency}</td>
