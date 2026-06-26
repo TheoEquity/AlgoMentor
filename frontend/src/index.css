@@ -834,6 +834,13 @@ a {
   color: var(--text-muted);
 }
 
+.parse-textarea {
+  min-height: 420px;
+  font-family: var(--font-mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
 .problem-meta-item span {
   color: var(--text-secondary);
   font-size: 12px;

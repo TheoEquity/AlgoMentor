@@ -183,8 +183,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
       {activeTab === 'paste' ? (
         <div>
           <textarea
-            className="settings-textarea"
-            rows={18}
+            className="settings-textarea parse-textarea"
             placeholder="将题目原文（如牛客、Leetcode 页面内容）粘贴到此处，包括标题、描述、输入输出格式、约束条件、样例等..."
             value={rawText}
             onChange={(event) => setRawText(event.target.value)}
