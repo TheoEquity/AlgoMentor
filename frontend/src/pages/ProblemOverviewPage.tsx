@@ -101,6 +101,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
   const [chatQuestion, setChatQuestion] = useState('')
   const [chatError, setChatError] = useState('')
   const [isChatting, setIsChatting] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     setForm(buildEditForm(problem))
@@ -333,6 +334,42 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       <article className="detail-card">
         <div className="ai-card-header">
           <div>
+            <h2>高级设置</h2>
+            <p>隐藏测试用例与各语言代码模板。</p>
+          </div>
+          <button type="button" className="button ghost" onClick={() => setShowAdvanced((prev) => !prev)}>
+            {showAdvanced ? '收起' : '展开'}
+          </button>
+        </div>
+        {showAdvanced ? (
+          <div className="settings-form-grid create-problem-grid">
+            <label className="settings-field settings-field-full">
+              <span>隐藏测试输入</span>
+              <textarea className="settings-textarea" value={form.hidden_input} onChange={(event) => handleFieldChange('hidden_input', event.target.value)} />
+            </label>
+            <label className="settings-field settings-field-full">
+              <span>隐藏测试输出</span>
+              <textarea className="settings-textarea" value={form.hidden_output} onChange={(event) => handleFieldChange('hidden_output', event.target.value)} />
+            </label>
+            <label className="settings-field settings-field-full">
+              <span>Python 模板</span>
+              <textarea className="settings-textarea settings-codearea" value={form.python_template} onChange={(event) => handleFieldChange('python_template', event.target.value)} />
+            </label>
+            <label className="settings-field settings-field-full">
+              <span>C++ 模板</span>
+              <textarea className="settings-textarea settings-codearea" value={form.cpp_template} onChange={(event) => handleFieldChange('cpp_template', event.target.value)} />
+            </label>
+            <label className="settings-field settings-field-full">
+              <span>Java 模板</span>
+              <textarea className="settings-textarea settings-codearea" value={form.java_template} onChange={(event) => handleFieldChange('java_template', event.target.value)} />
+            </label>
+          </div>
+        ) : null}
+      </article>
+
+      <article className="detail-card">
+        <div className="ai-card-header">
+          <div>
             <h2>AI 解题思路分析</h2>
             <p>{buildThinkingSummary(problem, categoryName)}</p>
           </div>
@@ -390,29 +427,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
               {isChatting ? '回答中...' : '发送'}
             </button>
           </div>
-        </div>
-
-        <div className="settings-form-grid create-problem-grid">
-          <label className="settings-field settings-field-full">
-            <span>隐藏测试输入</span>
-            <textarea className="settings-textarea" value={form.hidden_input} onChange={(event) => handleFieldChange('hidden_input', event.target.value)} />
-          </label>
-          <label className="settings-field settings-field-full">
-            <span>隐藏测试输出</span>
-            <textarea className="settings-textarea" value={form.hidden_output} onChange={(event) => handleFieldChange('hidden_output', event.target.value)} />
-          </label>
-          <label className="settings-field settings-field-full">
-            <span>Python 模板</span>
-            <textarea className="settings-textarea settings-codearea" value={form.python_template} onChange={(event) => handleFieldChange('python_template', event.target.value)} />
-          </label>
-          <label className="settings-field settings-field-full">
-            <span>C++ 模板</span>
-            <textarea className="settings-textarea settings-codearea" value={form.cpp_template} onChange={(event) => handleFieldChange('cpp_template', event.target.value)} />
-          </label>
-          <label className="settings-field settings-field-full">
-            <span>Java 模板</span>
-            <textarea className="settings-textarea settings-codearea" value={form.java_template} onChange={(event) => handleFieldChange('java_template', event.target.value)} />
-          </label>
         </div>
       </article>
     </section>
