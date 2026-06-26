@@ -231,6 +231,7 @@ def _seed_categories(cursor) -> None:
         (16, 'Greedy', 'greedy'),
         (17, 'Bit Manipulation', 'bit-manipulation'),
         (18, 'Simulation', 'simulation'),
+        (19, '数学', 'math'),
     ]
     for cat_id, name, slug in _CATEGORIES:
         cursor.execute(
