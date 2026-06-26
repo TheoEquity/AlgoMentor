@@ -32,7 +32,7 @@ function renderMath(content: string): string {
 
 export function MarkdownRenderer({ markdown }: MarkdownRendererProps) {
   const html = useMemo(() => {
-    const raw = marked.parse(markdown, { async: false }) as string
+    const raw = marked.parse(markdown, { async: false, breaks: false, gfm: true }) as string
     return renderMath(raw)
   }, [markdown])
 
