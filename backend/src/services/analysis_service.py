@@ -744,26 +744,30 @@ class AnalysisService:
 
     def _needs_formula_enrichment(self, text: str) -> bool:
         import re
-        math_indicators = [
-            'Σ', '∏', '∫', '√', '∞', '≤', '≥', '≠', '≈',
-            '概率', '期望', '方差', '组合数', '排列', '阶乘',
+        patterns = [
+            r'[Σ∏∫√∞≤≥≠≈]',
+            r'概率', r'期望', r'方差', r'组合数', r'排列', r'阶乘',
+            r'[CPE]\s*[(\[]', 
+            r'\^\{', r'_\{(?!\d+\})',
+            r'\\frac', r'\\sum', r'\\binom',
+            r'\d+/\d+', r'\([^)]*\)\s*\^\s*[a-z]',
         ]
-        return any(re.search(re.escape(p), text) for p in math_indicators)
+        return any(re.search(p, text) for p in patterns)
 
     def _enrich_formulas(self, settings: LLMSettings, api_key: str, result: ParsedProblemResult) -> ParsedProblemResult:
         prompt = (
-            '你是一个 LaTeX 排版专家。下面是一道算法题的 Markdown 题面，其中包含一些用纯文本表达的数学公式。'
-            '请将题面中所有数学表达式转换为标准的 $LaTeX$ 行内公式或块级公式，但保持其他所有内容（标题、段落结构、样例代码块）完全不变。\n\n'
-            '要求：\n'
-            '1. 普通变量和数字用 $x$ 包裹。\n'
-            '2. 分数如 1/2 改为 $\\frac{1}{2}$。\n'
-            '3. 求和符号 Σ 改为 $\\sum$，连乘 ∏ 改为 $\\prod$。\n'
-            '4. 组合数 C(n,k) 改为 $\\binom{n}{k}$ 或 $C(n,k)$。\n'
-            '5. 概率 P(...) 保持不变但加 $ 包裹。\n'
-            '6. 上标 x^2 改为 $x^2$，下标 x_i 改为 $x_i$。\n'
-            '7. 代码块（```...```）内不修改。\n'
-            '8. 只输出转换后的完整 Markdown，不要任何解释。\n\n'
-            f'原始 Markdown：\n{result.statement_markdown}'
+            '将以下算法题 Markdown 中所有纯文本数学公式转为标准 LaTeX（用 $ 包裹）。'
+            '只输出转换后的完整 Markdown，不要解释，不要改动代码块(```)内的任何内容。\n\n'
+            '转换规则（严格执行）：\n'
+            '- 变量/数字组合如 n、m、h、a_i、x^2、2^k → $n$、$m$、$h$、$a_i$、$x^2$、$2^k$\n'
+            '- 分数 1/2、1/(n+1)、a/b → $\\frac{1}{2}$、$\\frac{1}{n+1}$、$\\frac{a}{b}$\n'
+            '- 求和 Σ(i=1..n) → $\\sum_{i=1}^{n}$\n'
+            '- 组合数 C(n,k) → $\\binom{n}{k}$\n'
+            '- 概率 P(X=k) → $P(X=k)$，期望 E[X] → $E[X]$\n'
+            '- 上标 x^{k} → $x^{k}$，下标 x_{i} → $x_{i}$\n'
+            '- 乘号 * → $\\cdot$，但仅在数学上下文中\n'
+            '- 如果一段文字是纯数学表达式（如 ∑(1/C(n,k))），整段用 $$ 包裹成块级公式\n\n'
+            f'题目：\n{result.statement_markdown}'
         )
         try:
             raw = self.client.generate_text(settings, api_key, settings.solution_model, 0.3, prompt)
