@@ -25,7 +25,6 @@ type ProblemEditForm = {
   difficulty: 'Easy' | 'Medium' | 'Hard'
   category_slug: string
   statement_markdown: string
-  tags_text: string
   source_type: string
   source: string
   frequency: string
@@ -52,7 +51,6 @@ function buildEditForm(problem: ProblemDetail): ProblemEditForm {
     difficulty: problem.difficulty as 'Easy' | 'Medium' | 'Hard',
     category_slug: problem.category_slug,
     statement_markdown: problem.statement_markdown,
-    tags_text: problem.tags.join(', '),
     source_type: problem.source_type || 'manual',
     source: problem.source || '手工',
     frequency: problem.frequency || '中',
@@ -126,11 +124,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
   }
 
   const buildPayload = (): ProblemCreatePayload => {
-    const tags = form.tags_text
-      .split(/[，,]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-
     return {
       slug: form.slug.trim(),
       title: form.title.trim(),
@@ -141,7 +134,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       constraints_text: '',
       time_limit_ms: Number(form.time_limit_ms) || 2000,
       memory_limit_kb: Number(form.memory_limit_kb) || 262144,
-      tags,
+      tags: problem.tags,
       examples: [],
       supported_languages: ['Python', 'C++', 'Java'],
       starter_templates: {
@@ -265,10 +258,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="settings-field settings-field-full">
-              <span>算法标签</span>
-              <input value={form.tags_text} onChange={(event) => handleFieldChange('tags_text', event.target.value)} />
             </label>
             <label className="settings-field">
               <span>公司</span>
