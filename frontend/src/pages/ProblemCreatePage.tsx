@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 import { parseProblemText } from '../lib/analysisApi'
 import { createProblem } from '../lib/problemApi'
+import { listCompanies } from '../lib/companyApi'
+import type { Company } from '../types/company'
 import type { ParsedProblemResult } from '../types/analysis'
 import type { ProblemCreatePayload, ProblemLatestStatus } from '../types/problem'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
@@ -59,6 +61,11 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
 
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [companies, setCompanies] = useState<Company[]>([])
+
+  useEffect(() => {
+    void listCompanies().then(setCompanies).catch(() => {})
+  }, [])
 
   const handleParse = async () => {
     if (!rawText.trim()) {
@@ -234,7 +241,14 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                     </label>
                     <label className="settings-field">
                       <span>公司</span>
-                      <input value={form.company} onChange={(event) => updateForm('company', event.target.value)} />
+                      <select value={form.company} onChange={(event) => updateForm('company', event.target.value)}>
+                        {form.company && companies.every((item) => item.name !== form.company) ? (
+                          <option value={form.company}>{form.company}</option>
+                        ) : null}
+                        {companies.map((item) => (
+                          <option key={item.id} value={item.name}>{item.name}</option>
+                        ))}
+                      </select>
                     </label>
                     <label className="settings-field">
                       <span>难度</span>

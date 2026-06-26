@@ -746,15 +746,26 @@ class AnalysisService:
             '3. company 从上下文中识别公司名（如华为、字节跳动、腾讯、阿里巴巴等），无法识别则为空字符串。\n'
             '4. difficulty 必须是 Easy / Medium / Hard 之一。\n'
             '5. category_slug 必须从以下列表中选最匹配的：two-pointers, sliding-window, hashing, binary-search, prefix-sum, intervals, matrix-grid, linked-list, stack-queue, monotonic-stack, heap-priority-queue, tree, graphs, backtracking, dynamic-programming, greedy, bit-manipulation, simulation。\n'
-            '6. statement_markdown 必须整合为完整的 Markdown 正文，包含：题目标题(##)、题目描述、输入格式、输出格式、约束条件、补充说明、样例(含输入输出和解释)。所有数学公式使用 $LaTeX$ 语法。\n'
+            '6. statement_markdown 必须严格按照以下 Markdown 结构生成，这是唯一允许的格式：\n'
+            '## 题目描述\n\n(题目描述内容)\n\n'
+            '## 输入格式\n\n(输入格式说明)\n\n'
+            '## 输出格式\n\n(输出格式说明)\n\n'
+            '(如有补充说明则添加 ## 补充说明 段落)\n\n'
+            '## 样例\n\n'
+            '### 样例 1\n\n'
+            '**输入：**\n```\n(样例输入)\n```\n'
+            '**输出：**\n```\n(样例输出)\n```\n'
+            '**说明：**\n(样例解释)\n\n'
+            '(如有多个样例则继续 ### 样例 2 ...)\n'
+            '所有数学公式使用 $LaTeX$ 语法。不要使用其他标题层级或格式。\n'
             '7. tags 从原文提取最多 5 个中文标签。\n'
-            '8. time_limit_ms 从原文提取时间限制（默认 2000）。\n'
-            '9. memory_limit_kb 从原文提取空间限制 MB 数乘以 1024（默认 262144）。\n'
+            '8. time_limit_ms 从原文提取时间限制毫秒数，C/C++ 1秒=1000，其他语言2秒=2000，取最大值。\n'
+            '9. memory_limit_kb 从原文提取空间限制，如 256M = 262144 KB。\n'
             '10. source 原文来源（如牛客、Leetcode、手工等）。\n'
-            '11. source_type 原文来源类型（如牛客、Leetcode、manual）。\n'
+            '11. source_type 原文来源类型（如 牛客、Leetcode、manual）。\n'
             '12. frequency 根据公司出现频率推断（高/中/低），默认中。\n'
             '13. year 从原文提取年份，无法识别则为 null。\n'
-            '14. source_ref 来源引用说明。\n'
+            '14. source_ref 来源引用说明，如"华为2025AI笔试"。\n'
             '15. external_id 外部编号（若有）。\n'
             '16. examples 提取所有样例，每个包含 input/output/explanation 三个字符串字段。\n'
             '17. analysis 简要分析此题考察的算法点和解题思路（1-2 句）。\n\n'
@@ -823,7 +834,7 @@ class AnalysisService:
             company='',
             difficulty='Medium',
             category_slug='simulation',
-            statement_markdown=raw_text.strip(),
+            statement_markdown=f'## 题目描述\n\n{raw_text.strip()}\n\n## 输入格式\n\n(待补充)\n\n## 输出格式\n\n(待补充)\n',
             tags=[],
             time_limit_ms=2000,
             memory_limit_kb=262144,
