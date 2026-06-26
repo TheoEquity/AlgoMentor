@@ -23,7 +23,6 @@ type EditableForm = {
   difficulty: string
   category_slug: string
   statement_markdown: string
-  tags_text: string
   time_limit_ms: string
   memory_limit_kb: string
   source: string
@@ -41,7 +40,6 @@ function buildForm(parsed: ParsedProblemResult, rawText: string): EditableForm {
     difficulty: parsed.difficulty || 'Medium',
     category_slug: parsed.category_slug || '',
     statement_markdown: parsed.statement_markdown || rawText.trim(),
-    tags_text: parsed.tags.join(', '),
     time_limit_ms: String(parsed.time_limit_ms || 2000),
     memory_limit_kb: String(parsed.memory_limit_kb || 262144),
     source: parsed.source || '手工',
@@ -115,10 +113,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     setIsCreating(true)
     setCreateError('')
     try {
-      const tags = form.tags_text
-        .split(/[，,]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
+      const tags: string[] = ['未分类']
 
       const examples = parsed?.examples ?? []
       const testCases = examples.length > 0
@@ -272,10 +267,6 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                           <option key={item.slug} value={item.slug}>{item.name}</option>
                         ))}
                       </select>
-                    </label>
-                    <label className="settings-field settings-field-full">
-                      <span>算法标签 (逗号分隔)</span>
-                      <input value={form.tags_text} onChange={(event) => updateForm('tags_text', event.target.value)} />
                     </label>
                     <label className="settings-field">
                       <span>公司</span>
