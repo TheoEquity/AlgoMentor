@@ -8,32 +8,31 @@ type MarkdownRendererProps = {
   markdown: string
 }
 
-function renderMath(content: string): string {
-  let result = content
-
-  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (_full: string, expr: string) => {
+function extractMath(content: string): { text: string; html: string[] } {
+  const html: string[] = []
+  const text = content.replace(/```[\s\S]*?```|`[^`\n]+`|\$\$([\s\S]*?)\$\$|\$([^$\n]+?)\$/g, (full: string, displayExpr?: string, inlineExpr?: string) => {
+    const expr = displayExpr ?? inlineExpr
+    if (!expr) return full
     try {
-      return katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })
+      const rendered = katex.renderToString(expr.trim(), { displayMode: Boolean(displayExpr), throwOnError: false })
+      const index = html.push(rendered) - 1
+      return `KATEXPLACEHOLDER${index}`
     } catch {
-      return _full
+      return full
     }
   })
+  return { text, html }
+}
 
-  result = result.replace(/\$([^$]+?)\$/g, (_full: string, expr: string) => {
-    try {
-      return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false })
-    } catch {
-      return _full
-    }
-  })
-
-  return result
+function restoreMath(content: string, html: string[]): string {
+  return content.replace(/KATEXPLACEHOLDER(\d+)/g, (_full: string, index: string) => html[Number(index)] ?? _full)
 }
 
 export function MarkdownRenderer({ markdown }: MarkdownRendererProps) {
   const html = useMemo(() => {
-    const raw = marked.parse(markdown, { async: false, breaks: false, gfm: true }) as string
-    return renderMath(raw)
+    const math = extractMath(markdown)
+    const raw = marked.parse(math.text, { async: false, breaks: false, gfm: true }) as string
+    return restoreMath(raw, math.html)
   }, [markdown])
 
   return <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />

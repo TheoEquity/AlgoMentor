@@ -195,7 +195,7 @@ class AnalysisServiceTests(unittest.TestCase):
             title='硬盘寿命预测',
             statement_markdown='''## 题目描述
 
-概率： P(y=1) = 1/(1+e^{-z})
+概率： P(y=1) = σ(z) = 1 / (1 + e ^ −z)
 
 其中 z = w0 + Σ i = 1 5 w i x i
 

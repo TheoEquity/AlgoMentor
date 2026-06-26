@@ -805,8 +805,8 @@ class AnalysisService:
         # 1. sigmoid 常见概率公式 P(y=1)=1/(1+e^{-z})
         protected = _apply_outside_math(
             protected,
-            r'P\s*\(\s*([^)]+?)\s*\)\s*=\s*1\s*/\s*\(\s*1\s*\+\s*e\^\{?(-?[a-zA-Z0-9_]+)\}?\s*\)',
-            lambda m: _latex_inline(r'P(' + m.group(1).strip() + r') = \frac{1}{1+e^{' + m.group(2).strip() + '}}'),
+            r'P\s*\(\s*([^)]+?)\s*\)\s*=\s*(?:σ\s*\(\s*z\s*\)\s*=\s*)?1\s*/\s*\(\s*1\s*\+\s*e\s*\^\s*\{?\s*([-−]?[a-zA-Z0-9_]+)\s*\}?\s*\)',
+            lambda m: _latex_inline(r'P(' + m.group(1).strip() + r') = \frac{1}{1+e^{' + m.group(2).strip().replace('−', '-') + '}}'),
         )
 
         # 2. 线性模型 z = w0 + sum wi xi
