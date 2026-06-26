@@ -851,12 +851,41 @@ class AnalysisService:
                     examples_section += f'**说明：**\n{explanation}\n\n'
             markdown = markdown.strip() + examples_section
 
+        _CATEGORY_KW: dict[str, list[str]] = {
+            'two-pointers': ['双指针', '快慢指针', '对撞指针'],
+            'sliding-window': ['滑动窗口', '窗口', '子串'],
+            'hashing': ['哈希', '散列', 'hash', '字典', '映射'],
+            'binary-search': ['二分查找', '二分答案', '二分'],
+            'prefix-sum': ['前缀和', '前缀', '差分'],
+            'intervals': ['区间', '合并区间'],
+            'matrix-grid': ['矩阵', '网格', '二维数组'],
+            'linked-list': ['链表'],
+            'stack-queue': ['栈', '队列', '单调队列', '双端队列'],
+            'monotonic-stack': ['单调栈'],
+            'heap-priority-queue': ['堆', '优先队列', '大根堆', '小根堆', 'topk'],
+            'tree': ['树', '二叉树', '层序', '先序', '中序', '后序'],
+            'graphs': ['图', '最短路径', '拓扑排序', '并查集', '连通'],
+            'backtracking': ['回溯', '全排列', '组合', '子集'],
+            'dynamic-programming': ['动态规划', 'dp', '最优子结构', '状态转移', '记搜', '记忆化'],
+            'greedy': ['贪心', '贪心算法', '最优策略'],
+            'bit-manipulation': ['位运算', '异或', '按位', '二进制'],
+            'simulation': ['模拟', '构造', '实现'],
+        }
+        category = 'simulation'
+        max_score = 0
+        text_lower = text.lower()
+        for slug, keywords in _CATEGORY_KW.items():
+            score = sum(1 for kw in keywords if kw in text)
+            if score > max_score:
+                max_score = score
+                category = slug
+
         return ParsedProblemResult(
             slug=re.sub(r'[^\w-]', '', title.lower().replace(' ', '-'))[:48],
             title=title,
             company='',
             difficulty='Medium',
-            category_slug='dynamic-programming',
+            category_slug=category,
             statement_markdown=markdown,
             tags=[],
             time_limit_ms=time_ms,
