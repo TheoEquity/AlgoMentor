@@ -3,7 +3,9 @@ import { useState, useEffect } from 'react'
 import { parseProblemText } from '../lib/analysisApi'
 import { createProblem } from '../lib/problemApi'
 import { listCompanies } from '../lib/companyApi'
+import { listCategories } from '../lib/categoryApi'
 import type { Company } from '../types/company'
+import type { ProblemCategory } from '../types/problemCategory'
 import type { ParsedProblemResult } from '../types/analysis'
 import type { ProblemCreatePayload, ProblemLatestStatus } from '../types/problem'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
@@ -62,9 +64,11 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [companies, setCompanies] = useState<Company[]>([])
+  const [categories, setCategories] = useState<ProblemCategory[]>([])
 
   useEffect(() => {
     void listCompanies().then(setCompanies).catch(() => {})
+    void listCategories().then(setCategories).catch(() => {})
   }, [])
 
   const handleParse = async () => {
@@ -216,6 +220,10 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
               <div className="problem-overview-grid" style={{ marginTop: 'var(--space-4)' }}>
                 <article className="detail-card problem-statement-card">
                   <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+                    <span>标题</span>
+                    <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
+                  </label>
+                  <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
                     <span>题目正文 (Markdown)</span>
                     <textarea
                       className="settings-textarea"
@@ -235,9 +243,20 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                 <aside className="detail-card">
                   <h2>题目属性</h2>
                   <div className="settings-form-grid problem-edit-grid">
+                    <label className="settings-field">
+                      <span>题型</span>
+                      <select value={form.category_slug} onChange={(event) => updateForm('category_slug', event.target.value)}>
+                        {form.category_slug && categories.every((item) => item.slug !== form.category_slug) ? (
+                          <option value={form.category_slug}>{form.category_slug}</option>
+                        ) : null}
+                        {categories.map((item) => (
+                          <option key={item.slug} value={item.slug}>{item.name}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="settings-field settings-field-full">
-                      <span>标题</span>
-                      <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
+                      <span>算法标签 (逗号分隔)</span>
+                      <input value={form.tags_text} onChange={(event) => updateForm('tags_text', event.target.value)} />
                     </label>
                     <label className="settings-field">
                       <span>公司</span>
@@ -257,10 +276,6 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                         <option value="Medium">Medium</option>
                         <option value="Hard">Hard</option>
                       </select>
-                    </label>
-                    <label className="settings-field settings-field-full">
-                      <span>算法标签 (逗号分隔)</span>
-                      <input value={form.tags_text} onChange={(event) => updateForm('tags_text', event.target.value)} />
                     </label>
                     <label className="settings-field">
                       <span>频率</span>
