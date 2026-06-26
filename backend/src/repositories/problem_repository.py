@@ -69,6 +69,7 @@ class ProblemRepository:
 
     def create_problem(self, payload: ProblemCreate) -> ProblemDetail:
         now = datetime.now(UTC).isoformat()
+        slug = self._make_unique_slug(payload.slug)
         connection = get_connection(self.database_url)
 
         with connection, connection.cursor() as cursor:
@@ -84,7 +85,7 @@ class ProblemRepository:
                 RETURNING id
                 ''',
                 (
-                    payload.slug,
+                    slug,
                     payload.title,
                     payload.company,
                     payload.difficulty,
@@ -252,6 +253,21 @@ class ProblemRepository:
             memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
         )
+
+    def _make_unique_slug(self, slug: str) -> str:
+        import time
+        connection = get_connection(self.database_url)
+        base = slug or 'untitled-problem'
+        candidate = base
+        attempt = 1
+        with connection, connection.cursor() as cursor:
+            while True:
+                cursor.execute('SELECT id FROM problems WHERE slug = %s', (candidate,))
+                if cursor.fetchone() is None:
+                    return candidate
+                attempt += 1
+                candidate = f'{base}-{attempt}'
+        connection.close()
 
     @staticmethod
     def _detail_from_row(row: dict, test_case_rows: list[dict]) -> ProblemDetail:
