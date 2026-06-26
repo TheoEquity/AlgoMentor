@@ -299,8 +299,10 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                       </select>
                     </label>
                     <label className="settings-field">
-                      <span>来源引用</span>
-                      <input value={form.source_ref} onChange={(event) => updateForm('source_ref', event.target.value)} />
+                      <span>最新状态</span>
+                      <select value="未开始" disabled>
+                        <option value="未开始">未开始</option>
+                      </select>
                     </label>
                     <label className="settings-field">
                       <span>时间限制 (ms)</span>
