@@ -168,7 +168,10 @@ def initialize_database(database_url: str) -> None:
             "UPDATE problems SET status = '未开始' WHERE status IN ('published', 'draft')"
         )
         cursor.execute(
-            "ALTER TABLE problems DROP COLUMN IF EXISTS department"
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS time_limit_ms INTEGER NOT NULL DEFAULT 2000"
+        )
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS memory_limit_kb INTEGER NOT NULL DEFAULT 262144"
         )
 
         cursor.execute('SELECT COUNT(*) AS count FROM llm_settings')
@@ -245,8 +248,8 @@ def _seed_database(cursor) -> None:
                 statement_markdown, constraints_text, tags_json,
                 examples_json, supported_languages_json, starter_templates_json,
                 source_type, source, frequency, year, source_ref, external_id,
-                status, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                status, time_limit_ms, memory_limit_kb, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             ''',
             (
@@ -268,6 +271,8 @@ def _seed_database(cursor) -> None:
                 problem['source_ref'],
                 problem['external_id'],
                 problem['status'],
+                problem.get('time_limit_ms', 2000),
+                problem.get('memory_limit_kb', 262144),
                 problem['created_at'],
                 problem['updated_at'],
             ),

@@ -79,8 +79,8 @@ class ProblemRepository:
                     statement_markdown, constraints_text, tags_json,
                     examples_json, supported_languages_json, starter_templates_json,
                     source_type, source, frequency, year, source_ref, external_id,
-                    status, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    status, time_limit_ms, memory_limit_kb, created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 ''',
                 (
@@ -102,6 +102,8 @@ class ProblemRepository:
                     payload.source_ref,
                     payload.external_id,
                     payload.status,
+                    payload.time_limit_ms,
+                    payload.memory_limit_kb,
                     now,
                     now,
                 ),
@@ -163,6 +165,8 @@ class ProblemRepository:
                         source_ref = %s,
                         external_id = %s,
                         status = %s,
+                        time_limit_ms = %s,
+                        memory_limit_kb = %s,
                         updated_at = %s
                     WHERE id = %s
                     ''',
@@ -185,6 +189,8 @@ class ProblemRepository:
                         payload.source_ref,
                         payload.external_id,
                         payload.status,
+                        payload.time_limit_ms,
+                        payload.memory_limit_kb,
                         now,
                         problem_id,
                     ),
@@ -242,6 +248,8 @@ class ProblemRepository:
             source=row['source'],
             supported_languages=json.loads(row['supported_languages_json']),
             status=row['status'],
+            time_limit_ms=row.get('time_limit_ms', 2000),
+            memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
         )
 
@@ -255,7 +263,7 @@ class ProblemRepository:
             difficulty=row['difficulty'],
             category_slug=row['category_slug'],
             statement_markdown=row['statement_markdown'],
-            constraints_text=row['constraints_text'],
+            constraints_text=row['constraints_text'] or '',
             tags=json.loads(row['tags_json']),
             examples=[ExampleItem(**item) for item in json.loads(row['examples_json'])],
             supported_languages=json.loads(row['supported_languages_json']),
@@ -267,6 +275,8 @@ class ProblemRepository:
             source_ref=row['source_ref'],
             external_id=row['external_id'],
             status=row['status'],
+            time_limit_ms=row.get('time_limit_ms', 2000),
+            memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
             test_cases=[ProblemRepository._test_case_from_row(tcr) for tcr in test_case_rows],
         )

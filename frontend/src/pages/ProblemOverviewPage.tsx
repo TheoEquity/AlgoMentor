@@ -25,7 +25,6 @@ type ProblemEditForm = {
   difficulty: 'Easy' | 'Medium' | 'Hard'
   category_slug: string
   statement_markdown: string
-  constraints_text: string
   tags_text: string
   source_type: string
   source: string
@@ -34,9 +33,8 @@ type ProblemEditForm = {
   source_ref: string
   external_id: string
   status: ProblemLatestStatus
-  sample_input: string
-  sample_output: string
-  sample_explanation: string
+  time_limit_ms: string
+  memory_limit_kb: string
   hidden_input: string
   hidden_output: string
   python_template: string
@@ -45,9 +43,7 @@ type ProblemEditForm = {
 }
 
 function buildEditForm(problem: ProblemDetail): ProblemEditForm {
-  const sampleCase = problem.test_cases.find((item) => item.case_type === 'sample') ?? problem.test_cases[0]
   const hiddenCase = problem.test_cases.find((item) => item.case_type === 'hidden')
-  const firstExample = problem.examples[0]
 
   return {
     slug: problem.slug,
@@ -56,7 +52,6 @@ function buildEditForm(problem: ProblemDetail): ProblemEditForm {
     difficulty: problem.difficulty as 'Easy' | 'Medium' | 'Hard',
     category_slug: problem.category_slug,
     statement_markdown: problem.statement_markdown,
-    constraints_text: problem.constraints_text,
     tags_text: problem.tags.join(', '),
     source_type: problem.source_type || 'manual',
     source: problem.source || '手工',
@@ -65,9 +60,8 @@ function buildEditForm(problem: ProblemDetail): ProblemEditForm {
     source_ref: problem.source_ref || '',
     external_id: problem.external_id || '',
     status: normalizeLatestStatus(problem.status),
-    sample_input: sampleCase?.stdin_text || firstExample?.input || '',
-    sample_output: sampleCase?.expected_output_text || firstExample?.output || '',
-    sample_explanation: firstExample?.explanation || '',
+    time_limit_ms: String(problem.time_limit_ms ?? 2000),
+    memory_limit_kb: String(problem.memory_limit_kb ?? 262144),
     hidden_input: hiddenCase?.stdin_text || '',
     hidden_output: hiddenCase?.expected_output_text || '',
     python_template: problem.starter_templates.Python || '',
@@ -143,15 +137,11 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       difficulty: form.difficulty,
       category_slug: form.category_slug.trim(),
       statement_markdown: form.statement_markdown.trim(),
-      constraints_text: form.constraints_text.trim(),
+      constraints_text: '',
+      time_limit_ms: Number(form.time_limit_ms) || 2000,
+      memory_limit_kb: Number(form.memory_limit_kb) || 262144,
       tags,
-      examples: [
-        {
-          input: form.sample_input,
-          output: form.sample_output,
-          explanation: form.sample_explanation,
-        },
-      ],
+      examples: [],
       supported_languages: ['Python', 'C++', 'Java'],
       starter_templates: {
         Python: form.python_template,
@@ -167,16 +157,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       status: form.status,
       test_cases: [
         {
-          case_type: 'sample',
-          stdin_text: form.sample_input,
-          expected_output_text: form.sample_output,
-          sort_order: 1,
-        },
-        {
           case_type: 'hidden',
-          stdin_text: form.hidden_input || form.sample_input,
-          expected_output_text: form.hidden_output || form.sample_output,
-          sort_order: 2,
+          stdin_text: form.hidden_input || 'hidden\n1 2 3',
+          expected_output_text: form.hidden_output || '0',
+          sort_order: 1,
         },
       ],
     }
@@ -263,8 +247,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
         <article className="detail-card problem-statement-card">
           <h2>题面</h2>
           <MarkdownRenderer markdown={problem.statement_markdown} />
-          <h3>约束</h3>
-          <p>{problem.constraints_text}</p>
+          <div className="problem-limits">
+            <span>时间限制: {problem.time_limit_ms ?? 2000} ms</span>
+            <span>空间限制: {((problem.memory_limit_kb ?? 262144) / 1024).toFixed(0)} MB</span>
+          </div>
         </article>
 
         <aside className="detail-card">
@@ -403,17 +389,13 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
         </div>
 
         <div className="settings-form-grid create-problem-grid">
-          <label className="settings-field settings-field-full">
-            <span>样例输入</span>
-            <textarea className="settings-textarea" value={form.sample_input} onChange={(event) => handleFieldChange('sample_input', event.target.value)} />
+          <label className="settings-field">
+            <span>时间限制 (ms)</span>
+            <input value={form.time_limit_ms} onChange={(event) => handleFieldChange('time_limit_ms', event.target.value)} />
           </label>
-          <label className="settings-field settings-field-full">
-            <span>样例输出</span>
-            <textarea className="settings-textarea" value={form.sample_output} onChange={(event) => handleFieldChange('sample_output', event.target.value)} />
-          </label>
-          <label className="settings-field settings-field-full">
-            <span>样例解释</span>
-            <textarea className="settings-textarea" value={form.sample_explanation} onChange={(event) => handleFieldChange('sample_explanation', event.target.value)} />
+          <label className="settings-field">
+            <span>空间限制 (KB)</span>
+            <input value={form.memory_limit_kb} onChange={(event) => handleFieldChange('memory_limit_kb', event.target.value)} />
           </label>
           <label className="settings-field settings-field-full">
             <span>隐藏测试输入</span>

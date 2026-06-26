@@ -11,6 +11,8 @@ export type ProblemListItem = {
   source: string
   supported_languages: string[]
   status: string
+  time_limit_ms: number
+  memory_limit_kb: number
   updated_at: string
 }
 
@@ -37,6 +39,8 @@ export type ProblemCreatePayload = {
   category_slug: string
   statement_markdown: string
   constraints_text: string
+  time_limit_ms: number
+  memory_limit_kb: number
   tags: string[]
   examples: ProblemExample[]
   supported_languages: ('Python' | 'C++' | 'Java')[]
@@ -54,6 +58,8 @@ export type ProblemCreatePayload = {
 export type ProblemDetail = ProblemListItem & {
   statement_markdown: string
   constraints_text: string
+  time_limit_ms: number
+  memory_limit_kb: number
   starter_templates: Record<string, string>
   source_type?: string | null
   source_ref?: string | null

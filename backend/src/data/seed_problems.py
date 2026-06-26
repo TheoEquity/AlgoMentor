@@ -40,6 +40,8 @@ SEED_PROBLEMS = [
         'source_ref': 'ByteHunter 首批手工题库',
         'external_id': 'BH-001',
         'status': '未开始',
+        'time_limit_ms': 2000,
+        'memory_limit_kb': 262144,
         'created_at': '2026-06-23T16:00:00Z',
         'updated_at': '2026-06-23T16:00:00Z',
         'test_cases': [
@@ -90,6 +92,8 @@ SEED_PROBLEMS = [
         'source_ref': 'ByteHunter 首批手工题库',
         'external_id': 'BH-014',
         'status': '未开始',
+        'time_limit_ms': 2000,
+        'memory_limit_kb': 262144,
         'created_at': '2026-06-23T16:05:00Z',
         'updated_at': '2026-06-23T16:05:00Z',
         'test_cases': [

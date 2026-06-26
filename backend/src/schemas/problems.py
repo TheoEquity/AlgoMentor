@@ -27,9 +27,11 @@ class ProblemBase(BaseModel):
     difficulty: Literal['Easy', 'Medium', 'Hard']
     category_slug: str = Field(default='')
     statement_markdown: str = Field(min_length=10)
-    constraints_text: str = Field(min_length=5)
+    constraints_text: str = Field(default='')
+    time_limit_ms: int = Field(default=2000, ge=200)
+    memory_limit_kb: int = Field(default=262144, ge=16384)
     tags: list[str] = Field(min_length=1)
-    examples: list[ExampleItem] = Field(min_length=1)
+    examples: list[ExampleItem] = Field(default_factory=list)
     supported_languages: list[Literal['Python', 'C++', 'Java']] = Field(min_length=1)
     starter_templates: dict[str, str]
     source_type: str = 'manual'
@@ -58,12 +60,16 @@ class ProblemListItem(BaseModel):
     source: str
     supported_languages: list[str]
     status: str
+    time_limit_ms: int = 2000
+    memory_limit_kb: int = 262144
     updated_at: str
 
 
 class ProblemDetail(ProblemListItem):
     statement_markdown: str
-    constraints_text: str
+    constraints_text: str = ''
+    time_limit_ms: int = 2000
+    memory_limit_kb: int = 262144
     starter_templates: dict[str, str]
     source_type: str | None = None
     source: str | None = None

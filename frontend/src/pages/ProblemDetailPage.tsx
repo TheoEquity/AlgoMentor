@@ -893,8 +893,8 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
       <div className="summary-strip">
         <span className="summary-pill">{problem.external_id || problem.slug}</span>
         <span className="summary-pill">支持语言 {problem.supported_languages.join(' / ')}</span>
-        <span className="summary-pill">样例 {problem.examples.length} 个</span>
-        <span className="summary-pill">测试点 {problem.test_cases.length} 个</span>
+        <span className="summary-pill">{(problem.time_limit_ms ?? 2000)} ms</span>
+        <span className="summary-pill">{((problem.memory_limit_kb ?? 262144) / 1024).toFixed(0)} MB</span>
       </div>
 
       <div className="workspace-grid">
@@ -924,22 +924,9 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                     <section>
                       <h2>题面</h2>
                       <MarkdownRenderer markdown={problem.statement_markdown} />
-                    </section>
-                    <section>
-                      <h3>约束</h3>
-                      <p>{problem.constraints_text}</p>
-                    </section>
-                    <section>
-                      <h3>样例</h3>
-                      <div className="example-list">
-                        {problem.examples.map((example, index) => (
-                          <div key={`${problem.id}-${index}`} className="example-block">
-                            <strong>样例 {index + 1}</strong>
-                            <code>{example.input}</code>
-                            <code>{example.output}</code>
-                            <p>{example.explanation}</p>
-                          </div>
-                        ))}
+                      <div className="problem-limits">
+                        <span>时间限制: {problem.time_limit_ms ?? 2000} ms</span>
+                        <span>空间限制: {((problem.memory_limit_kb ?? 262144) / 1024).toFixed(0)} MB</span>
                       </div>
                     </section>
                   </article>

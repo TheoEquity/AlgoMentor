@@ -31,7 +31,6 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
     category_slug: '',
     difficulty: 'Medium' as 'Easy' | 'Medium' | 'Hard',
     statement_markdown: '',
-    constraints_text: '',
     tags_text: '',
     source_type: 'manual',
     source: '手工',
@@ -39,9 +38,8 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
     year: '2026',
     source_ref: '',
     external_id: '',
-    sample_input: '',
-    sample_output: '',
-    sample_explanation: '',
+    time_limit_ms: '2000',
+    memory_limit_kb: '262144',
     hidden_input: '',
     hidden_output: '',
     python_template: 'def solve() -> None:\n    pass\n',
@@ -72,7 +70,6 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       category_slug: '',
       difficulty: 'Medium',
       statement_markdown: '',
-      constraints_text: '',
       tags_text: '',
       source_type: 'manual',
       source: '手工',
@@ -80,9 +77,8 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       year: '2026',
       source_ref: '',
       external_id: '',
-      sample_input: '',
-      sample_output: '',
-      sample_explanation: '',
+      time_limit_ms: '2000',
+      memory_limit_kb: '262144',
       hidden_input: '',
       hidden_output: '',
       python_template: 'def solve() -> None:\n    pass\n',
@@ -108,15 +104,11 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       category_slug: form.category_slug.trim(),
       difficulty: form.difficulty,
       statement_markdown: form.statement_markdown.trim(),
-      constraints_text: form.constraints_text.trim(),
+      constraints_text: '',
       tags,
-      examples: [
-        {
-          input: form.sample_input,
-          output: form.sample_output,
-          explanation: form.sample_explanation,
-        },
-      ],
+      time_limit_ms: Number(form.time_limit_ms) || 2000,
+      memory_limit_kb: Number(form.memory_limit_kb) || 262144,
+      examples: [],
       supported_languages: ['Python', 'C++', 'Java'],
       starter_templates: {
         Python: form.python_template,
@@ -132,16 +124,10 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
       status: '未开始',
       test_cases: [
         {
-          case_type: 'sample',
-          stdin_text: form.sample_input,
-          expected_output_text: form.sample_output,
-          sort_order: 1,
-        },
-        {
           case_type: 'hidden',
-          stdin_text: form.hidden_input || form.sample_input,
-          expected_output_text: form.hidden_output || form.sample_output,
-          sort_order: 2,
+          stdin_text: form.hidden_input || 'hidden\n1 2 3',
+          expected_output_text: form.hidden_output || '0',
+          sort_order: 1,
         },
       ],
     }
@@ -352,36 +338,21 @@ export function ProblemLibraryPage({ onOpenProblem }: ProblemLibraryPageProps) {
               />
             </label>
             <label className="settings-field settings-field-full">
-              <span>题面</span>
+              <span>题目正文</span>
               <textarea
                 className="settings-textarea"
+                rows={12}
                 value={form.statement_markdown}
                 onChange={(event) => handleCreateField('statement_markdown', event.target.value)}
               />
             </label>
-            <label className="settings-field settings-field-full">
-              <span>约束</span>
-              <textarea
-                className="settings-textarea"
-                value={form.constraints_text}
-                onChange={(event) => handleCreateField('constraints_text', event.target.value)}
-              />
+            <label className="settings-field">
+              <span>时间限制 (ms)</span>
+              <input value={form.time_limit_ms} onChange={(event) => handleCreateField('time_limit_ms', event.target.value)} />
             </label>
-            <label className="settings-field settings-field-full">
-              <span>样例输入</span>
-              <textarea className="settings-textarea" value={form.sample_input} onChange={(event) => handleCreateField('sample_input', event.target.value)} />
-            </label>
-            <label className="settings-field settings-field-full">
-              <span>样例输出</span>
-              <textarea className="settings-textarea" value={form.sample_output} onChange={(event) => handleCreateField('sample_output', event.target.value)} />
-            </label>
-            <label className="settings-field settings-field-full">
-              <span>样例解释</span>
-              <textarea
-                className="settings-textarea"
-                value={form.sample_explanation}
-                onChange={(event) => handleCreateField('sample_explanation', event.target.value)}
-              />
+            <label className="settings-field">
+              <span>空间限制 (KB)</span>
+              <input value={form.memory_limit_kb} onChange={(event) => handleCreateField('memory_limit_kb', event.target.value)} />
             </label>
             <label className="settings-field settings-field-full">
               <span>隐藏测试输入</span>

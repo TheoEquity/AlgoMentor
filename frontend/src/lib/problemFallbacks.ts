@@ -14,6 +14,8 @@ export const fallbackProblemList: ProblemListItem[] = [
     source: '手工',
     supported_languages: ['Python', 'C++', 'Java'],
     status: '未开始',
+    time_limit_ms: 2000,
+    memory_limit_kb: 262144,
     updated_at: '2026-06-23T16:00:00Z',
   },
   {
@@ -29,6 +31,8 @@ export const fallbackProblemList: ProblemListItem[] = [
     source: '手工',
     supported_languages: ['Python', 'C++', 'Java'],
     status: '未开始',
+    time_limit_ms: 2000,
+    memory_limit_kb: 262144,
     updated_at: '2026-06-23T16:05:00Z',
   },
 ]
@@ -47,9 +51,11 @@ export const fallbackProblemDetails: Record<number, ProblemDetail> = {
     source: '手工',
     supported_languages: ['Python', 'C++', 'Java'],
     status: '未开始',
+    time_limit_ms: 2000,
+    memory_limit_kb: 262144,
     updated_at: '2026-06-23T16:00:00Z',
     statement_markdown: '给定一个长度为 n 的整数数组，请将数组划分为左右两个非空部分，使左右部分最大值差的绝对值最大。',
-    constraints_text: '2 <= n <= 2 * 10^5，-10^9 <= nums[i] <= 10^9',
+    constraints_text: '',
     starter_templates: {
       Python: 'def solve() -> None:\n    pass\n',
       'C++': '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    return 0;\n}\n',
@@ -87,9 +93,11 @@ export const fallbackProblemDetails: Record<number, ProblemDetail> = {
     source: '手工',
     supported_languages: ['Python', 'C++', 'Java'],
     status: '未开始',
+    time_limit_ms: 2000,
+    memory_limit_kb: 262144,
     updated_at: '2026-06-23T16:05:00Z',
     statement_markdown: '给定一个只包含 `(` 和 `)` 的字符串，求最少插入多少个括号能使其合法。',
-    constraints_text: '1 <= len(s) <= 10^5',
+    constraints_text: '',
     starter_templates: {
       Python: 'def solve() -> None:\n    pass\n',
       'C++': '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    return 0;\n}\n',
