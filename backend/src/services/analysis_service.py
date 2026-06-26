@@ -730,12 +730,143 @@ class AnalysisService:
         )
 
     def parse_problem_text(self, settings: LLMSettings, api_key: str, raw_text: str) -> ParsedProblemResult:
+        result = self._parse_rule_based(raw_text)
+        if result:
+            return result
         prompt = self._build_parse_prompt(raw_text)
         try:
             payload = self.client.generate_json(settings, api_key, settings.solution_model, settings.solution_temperature, prompt)
         except LLMClientError:
             return self._fallback_parse(settings, raw_text)
         return self._build_parse_result(settings, payload)
+
+    def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
+        import re
+
+        text = raw_text.strip()
+        if not text or len(text) < 20:
+            return None
+
+        time_ms = 2000
+        memory_kb = 262144
+        time_match = re.search(r'时间限制[：:]\s*C/?C\+\+\s*(\d+)\s*秒.*?其他语言\s*(\d+)\s*秒', text)
+        if time_match:
+            time_ms = max(int(time_match.group(1)), int(time_match.group(2))) * 1000
+        mem_match = re.search(r'空间限制[：:]\s*C/?C\+\+\s*(\d+)\s*(M|MB|K|KB).*?其他语言\s*(\d+)\s*(M|MB|K|KB)', text)
+        if mem_match:
+            val1, unit1, val2, unit2 = int(mem_match.group(1)), mem_match.group(2), int(mem_match.group(3)), mem_match.group(4)
+            kb1 = val1 * 1024 if unit1 in ('M', 'MB') else val1
+            kb2 = val2 * 1024 if unit2 in ('M', 'MB') else val2
+            memory_kb = max(kb1, kb2)
+
+        clean = text
+        limits_block = re.search(r'.*?时间限制.+\n空间限制.+\n', clean)
+        if limits_block:
+            clean = clean.replace(limits_block.group(0), '')
+
+        section_keywords = [
+            (r'\n输入描述[：:]', '## 输入格式'),
+            (r'\n输入格式[：:]', '## 输入格式'),
+            (r'\n输出描述[：:]', '## 输出格式'),
+            (r'\n输出格式[：:]', '## 输出格式'),
+            (r'\n补充说明[：:]', '## 补充说明'),
+            (r'\n备注[：:]', '## 补充说明'),
+        ]
+        for pattern, replacement in section_keywords:
+            clean = re.sub(pattern, '\n\n' + replacement + '\n\n', clean)
+
+        clean = re.sub(r'\n示例\s*(\d+)\s*\n', r'\n\n### 样例 \1\n\n', clean)
+        clean = re.sub(r'\n样例\s*(\d+)\s*\n', r'\n\n### 样例 \1\n\n', clean)
+
+        clean = re.sub(r'\n输入例子[：:]', '\n\n**输入：**\n```\n', clean)
+        clean = re.sub(r'\n输出例子[：:]', '\n```\n\n**输出：**\n```\n', clean)
+        clean = re.sub(r'\n例子说明[：:]', '\n```\n\n**说明：**\n', clean)
+        clean = re.sub(r'\n{3,}', '\n\n', clean)
+        clean = '\n' + clean
+
+        lines = [l.rstrip() for l in clean.split('\n')]
+        stripped_lines = [l.strip() for l in lines if l.strip()]
+        first_line = stripped_lines[0].lstrip('#').strip() if stripped_lines else ''
+        title = first_line if first_line and not first_line.startswith(('##', '输入', '输出', '示例', '样例', '**')) else '未命名题目'
+
+        desc_start = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and stripped.lstrip('#').strip() == title:
+                desc_start = i + 1
+                break
+            if stripped.startswith('## 题目描述') or stripped.startswith('## 输入') or stripped.startswith('**输入：**'):
+                desc_start = i
+                break
+
+        desc_end = len(lines)
+        for i in range(desc_start, len(lines)):
+            stripped = lines[i].strip()
+            if stripped.startswith('## ') or stripped.startswith('**输入：**') or stripped.startswith('### 样例'):
+                desc_end = i
+                break
+
+        description_lines = lines[desc_start:desc_end]
+        description = '\n'.join(description_lines).strip()
+        rest_lines = lines[desc_end:]
+        rest = '\n'.join(rest_lines).strip()
+
+        has_markdown_headings = any(l.strip().startswith('## ') for l in rest_lines)
+        if has_markdown_headings:
+            markdown = f'## 题目描述\n\n{description}\n\n{rest}'
+        else:
+            markdown = f'## 题目描述\n\n{description}' if description else clean.strip()
+
+        examples: list[dict] = []
+        example_blocks = re.split(r'\n### 样例 \d+\n\n', '\n' + markdown)
+        main_text = example_blocks[0] if example_blocks else markdown
+
+        for block in example_blocks[1:]:
+            inp_match = re.search(r'\*\*输入[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
+            out_match = re.search(r'\*\*输出[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
+            expl_match = re.search(r'\*\*说明[：:]\*\*\s*\n(.*?)(?=\n###|\Z)', block, re.DOTALL)
+            if inp_match and out_match:
+                examples.append({
+                    'input': inp_match.group(1).strip(),
+                    'output': out_match.group(1).strip(),
+                    'explanation': expl_match.group(1).strip() if expl_match else '',
+                })
+
+        source_ref = ''
+        ref_match = re.search(r'@(\S+)\s*整理上传', text)
+        if ref_match:
+            source_ref = f'牛友 @{ref_match.group(1)} 整理上传'
+
+        markdown = self._normalize_markdown(main_text.strip())
+        if examples:
+            examples_section = '\n\n## 样例\n\n'
+            for i, ex in enumerate(examples, 1):
+                examples_section += f'### 样例 {i}\n\n'
+                examples_section += f'**输入：**\n```\n{ex["input"]}\n```\n\n'
+                examples_section += f'**输出：**\n```\n{ex["output"]}\n```\n'
+                if ex['explanation']:
+                    examples_section += f'**说明：**\n{ex["explanation"]}\n\n'
+            markdown = markdown.strip() + examples_section
+
+        return ParsedProblemResult(
+            slug=re.sub(r'[^\w-]', '', title.lower().replace(' ', '-'))[:48],
+            title=title,
+            company='',
+            difficulty='Medium',
+            category_slug='dynamic-programming',
+            statement_markdown=markdown,
+            tags=[],
+            time_limit_ms=time_ms,
+            memory_limit_kb=memory_kb,
+            source='牛客',
+            source_type='牛客',
+            frequency='中',
+            year=None,
+            source_ref=source_ref,
+            external_id='',
+            examples=examples,
+            analysis='',
+        )
 
     def _build_parse_prompt(self, raw_text: str) -> str:
         return (

@@ -350,5 +350,55 @@ class AnalysisRouteTests(unittest.TestCase):
         self.assertEqual(service.calls, [('OpenAI Compatible', 'sk-test', 1, '为什么用动态规划？')])
 
 
+class RuleBasedParsingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from services.analysis_service import AnalysisService
+        self.service = AnalysisService()
+
+    def test_parses_niuke_problem_with_examples(self) -> None:
+        raw = (
+            '最优分词器\n'
+            '你在为一门极少见的语言做专用分词。\n'
+            '时间限制：C/C++ 1秒，其他语言2秒\n'
+            '空间限制：C/C++ 256M，其他语言512M\n'
+            '输入描述：\n'
+            '第一行：文本串 text。\n'
+            '输出描述：\n'
+            '一行，一个整数。\n'
+            '补充说明：\n'
+            '本题由牛友@Charles 整理上传\n'
+            '示例1\n'
+            '输入例子：\n'
+            'aababa\n'
+            '4\n'
+            'a 1\n'
+            '输出例子：\n'
+            '8\n'
+            '例子说明：\n'
+            '最优切分：aa | ba | ba\n'
+        )
+        result = self.service._parse_rule_based(raw)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.title, '最优分词器')
+        self.assertEqual(result.time_limit_ms, 2000)
+        self.assertEqual(result.memory_limit_kb, 524288)
+        self.assertEqual(result.source_ref, '牛友 @Charles 整理上传')
+        self.assertIn('## 题目描述', result.statement_markdown)
+        self.assertIn('## 输入格式', result.statement_markdown)
+        self.assertIn('## 输出格式', result.statement_markdown)
+        self.assertIn('## 补充说明', result.statement_markdown)
+        self.assertIn('### 样例 1', result.statement_markdown)
+        self.assertIn('```', result.statement_markdown)
+        self.assertEqual(len(result.examples), 1)
+        self.assertIn('aababa', result.examples[0]['input'] if isinstance(result.examples[0], dict) else result.examples[0].input)
+        self.assertIn('8', result.examples[0]['output'] if isinstance(result.examples[0], dict) else result.examples[0].output)
+
+    def test_short_text_returns_none(self) -> None:
+        self.assertIsNone(self.service._parse_rule_based('hello'))
+
+    def test_empty_text_returns_none(self) -> None:
+        self.assertIsNone(self.service._parse_rule_based('   '))
+
+
 if __name__ == '__main__':
     unittest.main()
