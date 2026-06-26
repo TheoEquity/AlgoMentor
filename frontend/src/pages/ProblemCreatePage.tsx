@@ -47,16 +47,16 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     setCreateError('')
     try {
       const payload: ProblemCreatePayload = {
-        slug: parsed.slug || parsed.title.toLowerCase().replace(/\s+/g, '-'),
-        title: parsed.title,
-        company: parsed.company,
-        difficulty: parsed.difficulty as 'Easy' | 'Medium' | 'Hard',
+        slug: parsed.slug && parsed.slug.length >= 3 ? parsed.slug : (parsed.title || 'untitled').toLowerCase().replace(/\W+/g, '-').replace(/^-|-$/g, '') || 'untitled-problem',
+        title: parsed.title || '未命名题目',
+        company: parsed.company || '未知',
+        difficulty: (['Easy', 'Medium', 'Hard'] as const).includes(parsed.difficulty as 'Easy' | 'Medium' | 'Hard') ? parsed.difficulty as 'Easy' | 'Medium' | 'Hard' : 'Medium',
         category_slug: parsed.category_slug || 'simulation',
-        statement_markdown: parsed.statement_markdown,
+        statement_markdown: (parsed.statement_markdown || rawText.trim()).length >= 10 ? (parsed.statement_markdown || rawText.trim()) : rawText.trim().padEnd(10, ' '),
         constraints_text: '',
         time_limit_ms: parsed.time_limit_ms || 2000,
         memory_limit_kb: parsed.memory_limit_kb || 262144,
-        tags: parsed.tags,
+        tags: parsed.tags.length > 0 ? parsed.tags : ['未分类'],
         examples: parsed.examples,
         supported_languages: ['Python', 'C++', 'Java'],
         starter_templates: {
@@ -71,12 +71,19 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
         source_ref: parsed.source_ref,
         external_id: parsed.external_id,
         status: '未开始' as ProblemLatestStatus,
-        test_cases: parsed.examples.map((example, index) => ({
-          case_type: index === 0 ? 'sample' : 'hidden',
-          stdin_text: example.input,
-          expected_output_text: example.output,
-          sort_order: index + 1,
-        })),
+        test_cases: parsed.examples.length > 0
+          ? parsed.examples.map((example, index) => ({
+              case_type: index === 0 ? 'sample' : 'hidden',
+              stdin_text: example.input,
+              expected_output_text: example.output,
+              sort_order: index + 1,
+            }))
+          : [{
+              case_type: 'hidden',
+              stdin_text: 'hidden\n1',
+              expected_output_text: '0',
+              sort_order: 1,
+            }],
       }
       const newProblem = await createProblem(payload)
       onProblemCreated(newProblem.id)
