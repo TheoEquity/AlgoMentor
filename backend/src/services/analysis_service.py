@@ -767,7 +767,7 @@ class AnalysisService:
             def _save(m: re.Match) -> str:
                 blocks.append(m.group(0))
                 return f'<<<CODEBLOCK{len(blocks) - 1}>>>'
-            protected = re.sub(r'```[\s\S]*?```', _save, text)
+            protected = re.sub(r'```[\s\S]*?```|`[^`\n]+`', _save, text)
             return protected, blocks
 
         def _restore(text: str, blocks: list[str]) -> str:
@@ -775,75 +775,128 @@ class AnalysisService:
                 text = text.replace(f'<<<CODEBLOCK{i}>>>', blk)
             return text
 
+        def _restore_math_spans(text: str, spans: list[str]) -> str:
+            for i, span in enumerate(spans):
+                text = text.replace(f'<<<MATHSPAN{i}>>>', span)
+            return text
+
+        def _protect_math_spans(text: str) -> tuple[str, list[str]]:
+            spans: list[str] = []
+            def _save(m: re.Match) -> str:
+                spans.append(m.group(0))
+                return f'<<<MATHSPAN{len(spans) - 1}>>>'
+            protected_text = re.sub(r'\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|`[^`\n]+`', _save, text)
+            return protected_text, spans
+
+        def _apply_outside_math(text: str, pattern: str, repl) -> str:
+            protected_text, spans = _protect_math_spans(text)
+            protected_text = re.sub(pattern, repl, protected_text)
+            return _restore_math_spans(protected_text, spans)
+
         protected, code_blocks = _protect_code_blocks(md)
 
-        # 1. 组合数 C(n,k) / C(n, k) → $\binom{n}{k}$
-        protected = re.sub(r'\bC\s*\(\s*(\w[\w\s,]*?)\s*\)', lambda m: _latex_inline(r'\binom{' + re.sub(r'\s*,\s*', '}{', m.group(1).strip()) + '}'), protected)
+        # 输入字段列表用代码片段保护，避免 avg_write_ms 这类字段被 Markdown 当成强调或下标
+        protected = _apply_outside_math(
+            protected,
+            r'\b[a-zA-Z_][a-zA-Z0-9_]*(?:,[a-zA-Z_][a-zA-Z0-9_]*){2,}\b',
+            lambda m: f'`{m.group(0)}`',
+        )
 
-        # 2. P(X=k) → $P(X=k)$
-        protected = re.sub(r'\bP\s*\(\s*([^)]+?)\s*\)', lambda m: _latex_inline('P(' + m.group(1).strip() + ')'), protected)
+        # 1. sigmoid 常见概率公式 P(y=1)=1/(1+e^{-z})
+        protected = _apply_outside_math(
+            protected,
+            r'P\s*\(\s*([^)]+?)\s*\)\s*=\s*1\s*/\s*\(\s*1\s*\+\s*e\^\{?(-?[a-zA-Z0-9_]+)\}?\s*\)',
+            lambda m: _latex_inline(r'P(' + m.group(1).strip() + r') = \frac{1}{1+e^{' + m.group(2).strip() + '}}'),
+        )
 
-        # 3. E[X] → $E[X]$
-        protected = re.sub(r'\bE\s*\[([^\]]+)\]', lambda m: _latex_inline('E[' + m.group(1).strip() + ']'), protected)
+        # 2. 线性模型 z = w0 + sum wi xi
+        protected = _apply_outside_math(
+            protected,
+            r'z\s*=\s*w0\s*\+\s*Σ\s*i\s*=\s*1\s*5\s*w\s*i\s*x\s*i',
+            lambda m: _latex_inline(r'z = w_0 + \sum_{i=1}^{5} w_i x_i'),
+        )
+
+        # 3. 组合数 C(n,k) / C(n, k) → $\binom{n}{k}$
+        protected = _apply_outside_math(
+            protected,
+            r'\bC\s*\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)',
+            lambda m: _latex_inline(r'\binom{' + m.group(1) + '}{' + m.group(2) + '}'),
+        )
+
+        # 4. P(X=k) → $P(X=k)$
+        protected = _apply_outside_math(
+            protected,
+            r'\bP\s*\(\s*([^)]+?)\s*\)',
+            lambda m: _latex_inline('P(' + m.group(1).strip() + ')'),
+        )
+
+        # 5. E[X] → $E[X]$
+        protected = _apply_outside_math(
+            protected,
+            r'\bE\s*\[([^\]]+)\]',
+            lambda m: _latex_inline('E[' + m.group(1).strip() + ']'),
+        )
 
         # 4. 分数 a/b → $\frac{a}{b}$ (a,b为简单表达式，仅ASCII)
         _W = r'[a-zA-Z0-9_]+'
         _WX = r'[a-zA-Z0-9_]+(?:[-+][a-zA-Z0-9_]+)*'
         _LB = r'(?<![$\w\\])'
         _LA = r'(?![$\w}])'
-        protected = re.sub(
+        protected = _apply_outside_math(
+            protected,
             _LB + '(' + _WX + r')\s*/\s*(' + _WX + ')' + _LA,
             lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2) + '}'),
-            protected,
         )
-        protected = re.sub(
+        protected = _apply_outside_math(
+            protected,
             _LB + '(' + _WX + r')\s*/\s*\(([^()]+)\)' + _LA,
             lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2).strip() + '}'),
-            protected,
         )
-        protected = re.sub(
+        protected = _apply_outside_math(
+            protected,
             _LB + r'\(([^()]+)\)\s*/\s*\(([^()]+)\)' + _LA,
             lambda m: _latex_inline(r'\frac{' + m.group(1).strip() + '}{' + m.group(2).strip() + '}'),
-            protected,
         )
-        protected = re.sub(
+        protected = _apply_outside_math(
+            protected,
             _LB + r'\(([^()]+)\)\s*/\s*(' + _WX + ')' + _LA,
             lambda m: _latex_inline(r'\frac{' + m.group(1).strip() + '}{' + m.group(2) + '}'),
-            protected,
         )
 
         # 5. x^{k} / e^{-z} → $x^{k}$ / $e^{-z}$
         _LB2 = r'(?<![$\w])'
-        protected = re.sub(
+        protected = _apply_outside_math(
+            protected,
             _LB2 + '(' + _W + r')\^\{([-\w]+)\}' + _LA,
             lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'),
-            protected,
         )
 
         # 6. x^2 → $x^2$ (单数字指数)
-        protected = re.sub(_LB + '(' + _W + r')\^(\d)' + _LA, lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
+        protected = _apply_outside_math(protected, _LB + '(' + _W + r')\^(\d)' + _LA, lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'))
 
         # 7. x_i → $x_i$
-        protected = re.sub(_LB2 + '(' + _W + r')_(' + _W + ')' + _LA, lambda m: _latex_inline(m.group(1) + '_' + m.group(2)), protected)
+        protected = _apply_outside_math(protected, _LB2 + '(' + _W + r')_(' + _W + ')' + _LA, lambda m: _latex_inline(m.group(1) + '_' + m.group(2)))
 
         # 8. Σ → $\sum$
-        protected = re.sub(r'Σ', lambda m: _latex_inline(r'\sum'), protected)
+        protected = _apply_outside_math(protected, r'Σ', lambda m: _latex_inline(r'\sum'))
 
         # 9. ∏ → $\prod$
-        protected = re.sub(r'∏', lambda m: _latex_inline(r'\prod'), protected)
+        protected = _apply_outside_math(protected, r'∏', lambda m: _latex_inline(r'\prod'))
 
         # 10. √x → $\sqrt{x}$
-        protected = re.sub(r'√(\w+)', lambda m: _latex_inline(r'\sqrt{' + m.group(1) + '}'), protected)
+        protected = _apply_outside_math(protected, r'√([a-zA-Z0-9_]+)', lambda m: _latex_inline(r'\sqrt{' + m.group(1) + '}'))
 
         # 11. ≤ ≥ ≠ ≈ ∞
-        protected = re.sub(r'≤', lambda m: _latex_inline(r'\leq'), protected)
-        protected = re.sub(r'≥', lambda m: _latex_inline(r'\geq'), protected)
-        protected = re.sub(r'≠', lambda m: _latex_inline(r'\neq'), protected)
-        protected = re.sub(r'≈', lambda m: _latex_inline(r'\approx'), protected)
-        protected = re.sub(r'∞', lambda m: _latex_inline(r'\infty'), protected)
+        protected = _apply_outside_math(protected, r'≤', lambda m: _latex_inline(r'\leq'))
+        protected = _apply_outside_math(protected, r'≥', lambda m: _latex_inline(r'\geq'))
+        protected = _apply_outside_math(protected, r'≠', lambda m: _latex_inline(r'\neq'))
+        protected = _apply_outside_math(protected, r'≈', lambda m: _latex_inline(r'\approx'))
+        protected = _apply_outside_math(protected, r'∞', lambda m: _latex_inline(r'\infty'))
+        protected = re.sub(r'\$(P\([^)]+\))\$\s*\$\\geq\$\s*([0-9.]+)', r'$\1 \\geq \2$', protected)
+        protected = re.sub(r'\$(P\([^)]+\))\$\s*\$\\leq\$\s*([0-9.]+)', r'$\1 \\leq \2$', protected)
 
         # 12. 数学中文后紧跟的数学表达式 (如: 概率 P(X=k))
-        protected = re.sub(r'(概率|期望|方差)\s*([=＝]\s*[\w\d\s\+\-\*/\(\)\^\.]+)', lambda m: f'{m.group(1)} {_latex_inline(m.group(2).strip())}', protected)
+        protected = _apply_outside_math(protected, r'(概率|期望|方差)\s*([=＝]\s*[a-zA-Z0-9_\s\+\-\*/\(\)\^\.]+)', lambda m: f'{m.group(1)} {_latex_inline(m.group(2).strip())}')
 
         result.statement_markdown = _restore(protected, code_blocks)
         return result
