@@ -13,12 +13,49 @@ type Props = {
   onProblemCreated: (problemId: number) => void
 }
 
+type EditableForm = {
+  title: string
+  company: string
+  difficulty: string
+  category_slug: string
+  statement_markdown: string
+  tags_text: string
+  time_limit_ms: string
+  memory_limit_kb: string
+  source: string
+  source_type: string
+  frequency: string
+  year: string
+  source_ref: string
+  external_id: string
+}
+
+function buildForm(parsed: ParsedProblemResult, rawText: string): EditableForm {
+  return {
+    title: parsed.title || '',
+    company: parsed.company || '',
+    difficulty: parsed.difficulty || 'Medium',
+    category_slug: parsed.category_slug || '',
+    statement_markdown: parsed.statement_markdown || rawText.trim(),
+    tags_text: parsed.tags.join(', '),
+    time_limit_ms: String(parsed.time_limit_ms || 2000),
+    memory_limit_kb: String(parsed.memory_limit_kb || 262144),
+    source: parsed.source || '手工',
+    source_type: parsed.source_type || 'manual',
+    frequency: parsed.frequency || '中',
+    year: parsed.year ? String(parsed.year) : '',
+    source_ref: parsed.source_ref || '',
+    external_id: parsed.external_id || '',
+  }
+}
+
 export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
   const [activeTab, setActiveTab] = useState<CreateTab>('paste')
   const [rawText, setRawText] = useState('')
   const [isParsing, setIsParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [parsed, setParsed] = useState<ParsedProblemResult | null>(null)
+  const [form, setForm] = useState<EditableForm | null>(null)
 
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -32,6 +69,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     try {
       const result = await parseProblemText(rawText)
       setParsed(result)
+      setForm(buildForm(result, rawText))
     } catch (error) {
       setParseError(error instanceof Error ? error.message : '解析失败')
     } finally {
@@ -39,51 +77,63 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     }
   }
 
+  const updateForm = (field: keyof EditableForm, value: string) => {
+    setForm((current) => (current ? { ...current, [field]: value } : current))
+  }
+
   const handleCreate = async () => {
-    if (!parsed) {
+    if (!form) {
       return
     }
     setIsCreating(true)
     setCreateError('')
     try {
+      const tags = form.tags_text
+        .split(/[，,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+      const examples = parsed?.examples ?? []
+      const testCases = examples.length > 0
+        ? examples.map((example, index) => ({
+            case_type: index === 0 ? ('sample' as const) : ('hidden' as const),
+            stdin_text: example.input,
+            expected_output_text: example.output,
+            sort_order: index + 1,
+          }))
+        : [{
+            case_type: 'hidden' as const,
+            stdin_text: 'hidden\n1',
+            expected_output_text: '0',
+            sort_order: 1,
+          }]
+
       const payload: ProblemCreatePayload = {
-        slug: parsed.slug && parsed.slug.length >= 3 ? parsed.slug : (parsed.title || 'untitled').toLowerCase().replace(/\W+/g, '-').replace(/^-|-$/g, '') || 'untitled-problem',
-        title: parsed.title || '未命名题目',
-        company: parsed.company || '未知',
-        difficulty: (['Easy', 'Medium', 'Hard'] as const).includes(parsed.difficulty as 'Easy' | 'Medium' | 'Hard') ? parsed.difficulty as 'Easy' | 'Medium' | 'Hard' : 'Medium',
-        category_slug: parsed.category_slug || 'simulation',
-        statement_markdown: (parsed.statement_markdown || rawText.trim()).length >= 10 ? (parsed.statement_markdown || rawText.trim()) : rawText.trim().padEnd(10, ' '),
+        slug: (parsed?.slug && parsed.slug.length >= 3 ? parsed.slug : form.title.replace(/\W+/g, '-').replace(/^-|-$/g, '')) || 'untitled-problem',
+        title: form.title || '未命名题目',
+        company: form.company || '未知',
+        difficulty: (['Easy', 'Medium', 'Hard'] as const).includes(form.difficulty as 'Easy' | 'Medium' | 'Hard') ? form.difficulty as 'Easy' | 'Medium' | 'Hard' : 'Medium',
+        category_slug: form.category_slug || 'simulation',
+        statement_markdown: form.statement_markdown.length >= 10 ? form.statement_markdown : form.statement_markdown.padEnd(10, ' '),
         constraints_text: '',
-        time_limit_ms: parsed.time_limit_ms || 2000,
-        memory_limit_kb: parsed.memory_limit_kb || 262144,
-        tags: parsed.tags.length > 0 ? parsed.tags : ['未分类'],
-        examples: parsed.examples,
+        time_limit_ms: Number(form.time_limit_ms) || 2000,
+        memory_limit_kb: Number(form.memory_limit_kb) || 262144,
+        tags: tags.length > 0 ? tags : ['未分类'],
+        examples,
         supported_languages: ['Python', 'C++', 'Java'],
         starter_templates: {
           Python: 'def solve() -> None:\n    pass\n',
           'C++': '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    return 0;\n}\n',
           Java: 'public class Main {\n    public static void main(String[] args) {\n    }\n}\n',
         },
-        source_type: parsed.source_type || 'manual',
-        source: parsed.source || '手工',
-        frequency: parsed.frequency || '中',
-        year: parsed.year,
-        source_ref: parsed.source_ref,
-        external_id: parsed.external_id,
+        source_type: form.source_type || 'manual',
+        source: form.source || '手工',
+        frequency: form.frequency || '中',
+        year: form.year.trim() ? Number(form.year) : null,
+        source_ref: form.source_ref,
+        external_id: form.external_id,
         status: '未开始' as ProblemLatestStatus,
-        test_cases: parsed.examples.length > 0
-          ? parsed.examples.map((example, index) => ({
-              case_type: index === 0 ? 'sample' : 'hidden',
-              stdin_text: example.input,
-              expected_output_text: example.output,
-              sort_order: index + 1,
-            }))
-          : [{
-              case_type: 'hidden',
-              stdin_text: 'hidden\n1',
-              expected_output_text: '0',
-              sort_order: 1,
-            }],
+        test_cases: testCases,
       }
       const newProblem = await createProblem(payload)
       onProblemCreated(newProblem.id)
@@ -134,7 +184,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
         <div>
           <textarea
             className="settings-textarea"
-            rows={14}
+            rows={18}
             placeholder="将题目原文（如牛客、Leetcode 页面内容）粘贴到此处，包括标题、描述、输入输出格式、约束条件、样例等..."
             value={rawText}
             onChange={(event) => setRawText(event.target.value)}
@@ -147,68 +197,94 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>
 
-          {parsed ? (
+          {form ? (
             <div style={{ marginTop: 'var(--space-5)' }}>
-              <article className="detail-card">
-                <div className="ai-card-header">
-                  <div>
-                    <h2>解析预览</h2>
-                    <p>{parsed.analysis || 'AI 已从原文中提取题目结构，请确认后创建。'}</p>
+              <div className="problem-edit-actions">
+                <button type="button" className="button primary" disabled={isCreating} onClick={() => void handleCreate()}>
+                  {isCreating ? '创建中...' : '创建题目'}
+                </button>
+                {parsed?.analysis ? <span className="save-success-text">{parsed.analysis}</span> : null}
+                {createError ? <span className="save-error-text">创建失败：{createError}</span> : null}
+              </div>
+
+              <div className="problem-overview-grid" style={{ marginTop: 'var(--space-4)' }}>
+                <article className="detail-card problem-statement-card">
+                  <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+                    <span>题目正文 (Markdown)</span>
+                    <textarea
+                      className="settings-textarea"
+                      rows={16}
+                      value={form.statement_markdown}
+                      onChange={(event) => updateForm('statement_markdown', event.target.value)}
+                    />
+                  </label>
+                  {form.statement_markdown ? (
+                    <>
+                      <h3 style={{ marginTop: 'var(--space-3)' }}>预览</h3>
+                      <MarkdownRenderer markdown={form.statement_markdown} />
+                    </>
+                  ) : null}
+                </article>
+
+                <aside className="detail-card">
+                  <h2>题目属性</h2>
+                  <div className="settings-form-grid problem-edit-grid">
+                    <label className="settings-field settings-field-full">
+                      <span>标题</span>
+                      <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>公司</span>
+                      <input value={form.company} onChange={(event) => updateForm('company', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>难度</span>
+                      <select value={form.difficulty} onChange={(event) => updateForm('difficulty', event.target.value)}>
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                      </select>
+                    </label>
+                    <label className="settings-field settings-field-full">
+                      <span>算法标签 (逗号分隔)</span>
+                      <input value={form.tags_text} onChange={(event) => updateForm('tags_text', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>频率</span>
+                      <select value={form.frequency} onChange={(event) => updateForm('frequency', event.target.value)}>
+                        <option value="高">高</option>
+                        <option value="中">中</option>
+                        <option value="低">低</option>
+                      </select>
+                    </label>
+                    <label className="settings-field">
+                      <span>年度</span>
+                      <input value={form.year} onChange={(event) => updateForm('year', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>来源</span>
+                      <select value={form.source} onChange={(event) => updateForm('source', event.target.value)}>
+                        <option value="牛客">牛客</option>
+                        <option value="Leetcode">Leetcode</option>
+                        <option value="手工">手工</option>
+                        <option value="AI派生">AI派生</option>
+                      </select>
+                    </label>
+                    <label className="settings-field">
+                      <span>来源引用</span>
+                      <input value={form.source_ref} onChange={(event) => updateForm('source_ref', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>时间限制 (ms)</span>
+                      <input value={form.time_limit_ms} onChange={(event) => updateForm('time_limit_ms', event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>空间限制 (KB)</span>
+                      <input value={form.memory_limit_kb} onChange={(event) => updateForm('memory_limit_kb', event.target.value)} />
+                    </label>
                   </div>
-                  <button type="button" className="button primary" disabled={isCreating} onClick={() => void handleCreate()}>
-                    {isCreating ? '创建中...' : '创建题目'}
-                  </button>
-                </div>
-                {createError ? <div className="backend-note save-error-text" style={{ marginBottom: 0 }}>创建失败：{createError}</div> : null}
-
-                <div className="settings-form-grid problem-edit-grid" style={{ marginTop: 'var(--space-4)' }}>
-                  <label className="settings-field">
-                    <span>标题</span>
-                    <input value={parsed.title} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>公司</span>
-                    <input value={parsed.company || '(未识别)'} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>难度</span>
-                    <input value={parsed.difficulty} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>题型</span>
-                    <input value={parsed.category_slug} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>时间限制 (ms)</span>
-                    <input value={parsed.time_limit_ms} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>空间限制 (KB)</span>
-                    <input value={parsed.memory_limit_kb} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field settings-field-full">
-                    <span>标签</span>
-                    <input value={parsed.tags.join(', ')} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>来源</span>
-                    <input value={parsed.source} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field">
-                    <span>年份</span>
-                    <input value={parsed.year ?? ''} readOnly className="readonly-input" />
-                  </label>
-                  <label className="settings-field settings-field-full">
-                    <span>来源引用</span>
-                    <input value={parsed.source_ref} readOnly className="readonly-input" />
-                  </label>
-                </div>
-              </article>
-
-              <article className="detail-card" style={{ marginTop: 'var(--space-4)' }}>
-                <h2>题目正文预览</h2>
-                <MarkdownRenderer markdown={parsed.statement_markdown} />
-              </article>
+                </aside>
+              </div>
             </div>
           ) : null}
         </div>
