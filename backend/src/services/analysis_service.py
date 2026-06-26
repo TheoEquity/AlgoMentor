@@ -746,18 +746,24 @@ class AnalysisService:
             '3. company 从上下文中识别公司名（如华为、字节跳动、腾讯、阿里巴巴等），无法识别则为空字符串。\n'
             '4. difficulty 必须是 Easy / Medium / Hard 之一。\n'
             '5. category_slug 必须从以下列表中选最匹配的：two-pointers, sliding-window, hashing, binary-search, prefix-sum, intervals, matrix-grid, linked-list, stack-queue, monotonic-stack, heap-priority-queue, tree, graphs, backtracking, dynamic-programming, greedy, bit-manipulation, simulation。\n'
-            '6. statement_markdown 必须严格按照以下 Markdown 结构生成，这是唯一允许的格式：\n'
-            '## 题目描述\n\n(题目描述内容)\n\n'
-            '## 输入格式\n\n(输入格式说明)\n\n'
-            '## 输出格式\n\n(输出格式说明)\n\n'
-            '(如有补充说明则添加 ## 补充说明 段落)\n\n'
+            '6. statement_markdown 必须严格按照下面格式逐字生成，段落间保留空行，样例输入输出必须用代码块包裹：\n'
+            '\n'
+            '## 题目描述\n\n'
+            '(题目描述内容，多段落间空一行分隔)\n\n'
+            '## 输入格式\n\n'
+            '(输入格式说明)\n\n'
+            '## 输出格式\n\n'
+            '(输出格式说明)\n\n'
+            '(如有约束条件或补充说明则加下面的段落)\n\n'
+            '## 补充说明\n\n'
+            '(补充内容)\n\n'
             '## 样例\n\n'
             '### 样例 1\n\n'
-            '**输入：**\n```\n(样例输入)\n```\n'
-            '**输出：**\n```\n(样例输出)\n```\n'
-            '**说明：**\n(样例解释)\n\n'
-            '(如有多个样例则继续 ### 样例 2 ...)\n'
-            '所有数学公式使用 $LaTeX$ 语法。不要使用其他标题层级或格式。\n'
+            '**输入：**\n```\n(样例1输入)\n```\n'
+            '**输出：**\n```\n(样例1输出)\n```\n'
+            '**说明：**\n(样例1解释)\n\n'
+            '(多样例继续按同样格式追加 ### 样例 2 ...)\n\n'
+            '要点：1) 数学用 $LaTeX$ 语法；2) 列表项独立成段；3) 输入输出必须用 ``` 代码块；4) 段落间必须有空行。\n'
             '7. tags 从原文提取最多 5 个中文标签。\n'
             '8. time_limit_ms 从原文提取时间限制毫秒数，C/C++ 1秒=1000，其他语言2秒=2000，取最大值。\n'
             '9. memory_limit_kb 从原文提取空间限制，如 256M = 262144 KB。\n'
@@ -782,6 +788,9 @@ class AnalysisService:
                     'output': str(item.get('output', '')).strip(),
                     'explanation': str(item.get('explanation', '')).strip(),
                 })
+
+        statement = str(payload.get('statement_markdown', '')).strip()
+        statement = self._normalize_markdown(statement)
 
         valid_difficulties = {'Easy', 'Medium', 'Hard'}
         difficulty = str(payload.get('difficulty', 'Medium'))
@@ -811,7 +820,7 @@ class AnalysisService:
             company=str(payload.get('company', '')).strip(),
             difficulty=difficulty,
             category_slug=category,
-            statement_markdown=str(payload.get('statement_markdown', '')).strip(),
+            statement_markdown=statement,
             tags=tags,
             time_limit_ms=int(payload.get('time_limit_ms', 2000)),
             memory_limit_kb=int(payload.get('memory_limit_kb', 262144)),
@@ -825,6 +834,20 @@ class AnalysisService:
             analysis=str(payload.get('analysis', '')).strip(),
         )
 
+    def _normalize_markdown(self, text: str) -> str:
+        if not text:
+            return text
+        result = re.sub(r'\n{3,}', '\n\n', text)
+        sections = ['## 题目描述', '## 输入格式', '## 输出格式', '## 补充说明', '## 样例']
+        for section in sections:
+            result = re.sub(rf'(?<!\n)\n({re.escape(section)})', r'\n\n\1', result)
+            result = re.sub(rf'\n({re.escape(section)})', r'\n\n\1', result, re.DOTALL)
+        result = re.sub(r'(?<!\n)\n\*\*输入', r'\n\n**输入', result)
+        result = re.sub(r'\n\*\*输出', r'\n\n**输出', result)
+        result = re.sub(r'\n\*\*说明', r'\n\n**说明', result)
+        result = result.strip()
+        return result
+
     def _fallback_parse(self, settings: LLMSettings, raw_text: str) -> ParsedProblemResult:
         lines = [line.strip() for line in raw_text.strip().split('\n') if line.strip()]
         title = lines[0] if lines else '未命名题目'
@@ -834,7 +857,7 @@ class AnalysisService:
             company='',
             difficulty='Medium',
             category_slug='simulation',
-            statement_markdown=f'## 题目描述\n\n{raw_text.strip()}\n\n## 输入格式\n\n(待补充)\n\n## 输出格式\n\n(待补充)\n',
+            statement_markdown=self._normalize_markdown(f'## 题目描述\n\n{raw_text.strip()}\n\n## 输入格式\n\n(待补充)\n\n## 输出格式\n\n(待补充)\n'),
             tags=[],
             time_limit_ms=2000,
             memory_limit_kb=262144,
