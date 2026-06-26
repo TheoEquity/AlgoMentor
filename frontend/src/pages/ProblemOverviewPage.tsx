@@ -247,10 +247,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
         <article className="detail-card problem-statement-card">
           <h2>题面</h2>
           <MarkdownRenderer markdown={problem.statement_markdown} />
-          <div className="problem-limits">
-            <span>时间限制: {problem.time_limit_ms ?? 2000} ms</span>
-            <span>空间限制: {((problem.memory_limit_kb ?? 262144) / 1024).toFixed(0)} MB</span>
-          </div>
         </article>
 
         <aside className="detail-card">
@@ -322,6 +318,14 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
                 <option value="待修正">待修正</option>
               </select>
             </label>
+            <label className="settings-field">
+              <span>时间限制 (ms)</span>
+              <input value={form.time_limit_ms} onChange={(event) => handleFieldChange('time_limit_ms', event.target.value)} />
+            </label>
+            <label className="settings-field">
+              <span>空间限制 (KB)</span>
+              <input value={form.memory_limit_kb} onChange={(event) => handleFieldChange('memory_limit_kb', event.target.value)} />
+            </label>
           </div>
         </aside>
       </div>
@@ -389,14 +393,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
         </div>
 
         <div className="settings-form-grid create-problem-grid">
-          <label className="settings-field">
-            <span>时间限制 (ms)</span>
-            <input value={form.time_limit_ms} onChange={(event) => handleFieldChange('time_limit_ms', event.target.value)} />
-          </label>
-          <label className="settings-field">
-            <span>空间限制 (KB)</span>
-            <input value={form.memory_limit_kb} onChange={(event) => handleFieldChange('memory_limit_kb', event.target.value)} />
-          </label>
           <label className="settings-field settings-field-full">
             <span>隐藏测试输入</span>
             <textarea className="settings-textarea" value={form.hidden_input} onChange={(event) => handleFieldChange('hidden_input', event.target.value)} />

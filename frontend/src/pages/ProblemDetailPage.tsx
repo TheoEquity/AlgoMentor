@@ -924,10 +924,6 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                     <section>
                       <h2>题面</h2>
                       <MarkdownRenderer markdown={problem.statement_markdown} />
-                      <div className="problem-limits">
-                        <span>时间限制: {problem.time_limit_ms ?? 2000} ms</span>
-                        <span>空间限制: {((problem.memory_limit_kb ?? 262144) / 1024).toFixed(0)} MB</span>
-                      </div>
                     </section>
                   </article>
 

@@ -53,19 +53,6 @@ STATEMENT = """## 题目描述
 ```
 **说明：**
 h ≤ m，单行和为 1+2+3=6，总和 = n×6 = 5×6=30。
-
-### 样例 2
-
-**输入：**
-```
-2 3 5
-```
-**输出：**
-```
-24
-```
-**说明：**
-h > m，q = [1, 2, 3, 3, 3]，行和 = 12，总和 = 2×12=24。
 """
 
 PYTHON_TEMPLATE = """def solve() -> None:
@@ -121,7 +108,7 @@ def import_problem():
         'title': '简化Attention输出的元素总和',
         'company': '华为',
         'difficulty': 'Medium',
-        'category_slug': 'math',
+        'category_slug': 'simulation',
         'statement_markdown': STATEMENT,
         'constraints_text': '',
         'tags_json': json.dumps(['数学', '矩阵', '模拟']),
@@ -130,11 +117,6 @@ def import_problem():
                 'input': '5 4 3',
                 'output': '30',
                 'explanation': 'h ≤ m，单行和为 1+2+3=6，总和 = n×6 = 5×6=30。',
-            },
-            {
-                'input': '2 3 5',
-                'output': '24',
-                'explanation': 'h > m，q = [1, 2, 3, 3, 3]，行和 = 12，总和 = 2×12=24。',
             },
         ]),
         'supported_languages_json': json.dumps(['Python', 'C++', 'Java']),
@@ -164,7 +146,7 @@ def import_problem():
             'sort_order': 1,
         },
         {
-            'case_type': 'sample',
+            'case_type': 'hidden',
             'stdin_text': '2 3 5',
             'expected_output_text': '24',
             'sort_order': 2,

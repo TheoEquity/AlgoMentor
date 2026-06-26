@@ -110,7 +110,7 @@ SEED_PROBLEMS = [
         'title': '简化Attention输出的元素总和',
         'company': '华为',
         'difficulty': 'Medium',
-        'category_slug': 'math',
+        'category_slug': 'simulation',
         'statement_markdown': (
             '## 题目描述\n\n'
             '给定三个正整数 n、m、h（均小于 100），构造如下数据并计算结果。\n\n'
@@ -133,11 +133,7 @@ SEED_PROBLEMS = [
             '### 样例 1\n\n'
             '**输入：**\n```\n5 4 3\n```\n'
             '**输出：**\n```\n30\n```\n'
-            '**说明：** h ≤ m，单行和为 1+2+3=6，总和 = n×6 = 5×6=30。\n\n'
-            '### 样例 2\n\n'
-            '**输入：**\n```\n2 3 5\n```\n'
-            '**输出：**\n```\n24\n```\n'
-            '**说明：** h > m，q = [1, 2, 3, 3, 3]，行和 = 12，总和 = 2×12=24。'
+            '**说明：** h ≤ m，单行和为 1+2+3=6，总和 = n×6 = 5×6=30。'
         ),
         'constraints_text': '',
         'tags_json': json.dumps(['数学', '矩阵', '模拟']),
@@ -147,11 +143,6 @@ SEED_PROBLEMS = [
                     'input': '5 4 3',
                     'output': '30',
                     'explanation': 'h ≤ m，单行和为 1+2+3=6，总和 = n×6 = 5×6=30。',
-                },
-                {
-                    'input': '2 3 5',
-                    'output': '24',
-                    'explanation': 'h > m，q = [1, 2, 3, 3, 3]，行和 = 12，总和 = 2×12=24。',
                 },
             ]
         ),
@@ -182,7 +173,7 @@ SEED_PROBLEMS = [
                 'sort_order': 1,
             },
             {
-                'case_type': 'sample',
+                'case_type': 'hidden',
                 'stdin_text': '2 3 5',
                 'expected_output_text': '24',
                 'sort_order': 2,
