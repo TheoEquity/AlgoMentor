@@ -88,6 +88,31 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     }
   }
 
+  const handleUseRaw = () => {
+    const text = rawText.trim()
+    if (!text) return
+    setParsed(null)
+    const lines = text.split('\n')
+    const firstLine = lines[0].replace(/^#+\s*/, '').trim()
+    const title = firstLine || '未命名题目'
+    setForm({
+      title,
+      company: '',
+      difficulty: 'Medium',
+      category_slug: '',
+      statement_markdown: text,
+      tags_text: '',
+      time_limit_ms: '2000',
+      memory_limit_kb: '262144',
+      source: '手工',
+      source_type: 'manual',
+      frequency: '中',
+      year: '',
+      source_ref: '',
+      external_id: '',
+    })
+  }
+
   const updateForm = (field: keyof EditableForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current))
   }
@@ -160,7 +185,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
       <div className="page-header">
         <div>
           <h1>新增题目</h1>
-          <p>手工粘贴原始题面让 AI 解析为结构化数据，或通过 PDF / 图像导入。</p>
+            <p>手工粘贴原始题面，可选择 AI 解析提取字段，或直接使用原文保留排版。</p>
         </div>
         <button type="button" className="button ghost" onClick={onBack}>
           返回题库
@@ -195,7 +220,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
         <div>
           <textarea
             className="settings-textarea parse-textarea"
-            placeholder="将题目原文（如牛客、Leetcode 页面内容）粘贴到此处，包括标题、描述、输入输出格式、约束条件、样例等..."
+            placeholder="将题目原文（如牛客、Leetcode 页面内容）粘贴到此处。点击「直接使用原文」保留原始排版，或点击「AI 解析」让 AI 提取结构化字段。"
             value={rawText}
             onChange={(event) => setRawText(event.target.value)}
           />
@@ -203,6 +228,9 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
           <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
             <button type="button" className="button primary" disabled={isParsing || !rawText.trim()} onClick={() => void handleParse()}>
               {isParsing ? 'AI 解析中...' : 'AI 解析'}
+            </button>
+            <button type="button" className="button" disabled={isParsing || !rawText.trim()} onClick={() => { handleUseRaw() }}>
+              直接使用原文
             </button>
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>
