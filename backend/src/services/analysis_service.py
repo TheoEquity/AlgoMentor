@@ -786,17 +786,45 @@ class AnalysisService:
         # 3. E[X] → $E[X]$
         protected = re.sub(r'\bE\s*\[([^\]]+)\]', lambda m: _latex_inline('E[' + m.group(1).strip() + ']'), protected)
 
-        # 4. 分数 a/b (a,b为数字或简单变量)
-        protected = re.sub(r'(?<![$\w\\])(\w+)\s*/\s*(\w+)(?![$\w}])', lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2) + '}'), protected)
+        # 4. 分数 a/b → $\frac{a}{b}$ (a,b为简单表达式，仅ASCII)
+        _W = r'[a-zA-Z0-9_]+'
+        _WX = r'[a-zA-Z0-9_]+(?:[-+][a-zA-Z0-9_]+)*'
+        _LB = r'(?<![$\w\\])'
+        _LA = r'(?![$\w}])'
+        protected = re.sub(
+            _LB + '(' + _WX + r')\s*/\s*(' + _WX + ')' + _LA,
+            lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2) + '}'),
+            protected,
+        )
+        protected = re.sub(
+            _LB + '(' + _WX + r')\s*/\s*\(([^()]+)\)' + _LA,
+            lambda m: _latex_inline(r'\frac{' + m.group(1) + '}{' + m.group(2).strip() + '}'),
+            protected,
+        )
+        protected = re.sub(
+            _LB + r'\(([^()]+)\)\s*/\s*\(([^()]+)\)' + _LA,
+            lambda m: _latex_inline(r'\frac{' + m.group(1).strip() + '}{' + m.group(2).strip() + '}'),
+            protected,
+        )
+        protected = re.sub(
+            _LB + r'\(([^()]+)\)\s*/\s*(' + _WX + ')' + _LA,
+            lambda m: _latex_inline(r'\frac{' + m.group(1).strip() + '}{' + m.group(2) + '}'),
+            protected,
+        )
 
-        # 5. x^{k} / a^{b} → $x^{k}$
-        protected = re.sub(r'(?<![$\w])(\w+)\^\{(\w+)\}(?![$\w}])', lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
+        # 5. x^{k} / e^{-z} → $x^{k}$ / $e^{-z}$
+        _LB2 = r'(?<![$\w])'
+        protected = re.sub(
+            _LB2 + '(' + _W + r')\^\{([-\w]+)\}' + _LA,
+            lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'),
+            protected,
+        )
 
         # 6. x^2 → $x^2$ (单数字指数)
-        protected = re.sub(r'(?<![$\w\\])(\w+)\^(\d)(?![$\w}])', lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
+        protected = re.sub(_LB + '(' + _W + r')\^(\d)' + _LA, lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'), protected)
 
         # 7. x_i → $x_i$
-        protected = re.sub(r'(?<![$\w])(\w+)_(\w+)(?![$\w}])', lambda m: _latex_inline(m.group(1) + '_' + m.group(2)), protected)
+        protected = re.sub(_LB2 + '(' + _W + r')_(' + _W + ')' + _LA, lambda m: _latex_inline(m.group(1) + '_' + m.group(2)), protected)
 
         # 8. Σ → $\sum$
         protected = re.sub(r'Σ', lambda m: _latex_inline(r'\sum'), protected)
