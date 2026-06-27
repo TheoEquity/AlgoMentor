@@ -260,4 +260,11 @@ async def parse_problem_text(
 ) -> ParsedProblemResult:
     settings = settings_repository.get_settings()
     api_key = settings_repository.get_api_key()
-    return analysis_service.parse_problem_text(settings, api_key, payload.raw_text)
+    return analysis_service.parse_problem_text(
+        settings,
+        api_key,
+        payload.raw_text,
+        mode=payload.mode,
+        image_data_url=payload.image_data_url,
+        image_name=payload.image_name,
+    )

@@ -33,6 +33,26 @@ class LLMClient:
             return self._call_anthropic_text(settings, api_key, model, prompt, temperature)
         return self._call_openai_text(settings, api_key, model, prompt, temperature)
 
+    def generate_json_with_image(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        prompt: str,
+        temperature: float,
+        image_data_url: str,
+    ) -> dict:
+        if not settings.enabled:
+            raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
+
+        if not api_key:
+            raise LLMClientError('系统管理中尚未配置 API Key，当前无法发起真实模型请求。')
+
+        if settings.provider == 'Anthropic Compatible':
+            return self._call_anthropic_compatible_with_image(settings, api_key, model, prompt, temperature, image_data_url)
+
+        return self._call_openai_compatible_with_image(settings, api_key, model, prompt, temperature, image_data_url)
+
     def stream_text(self, settings: LLMSettings, api_key: str, model: str, prompt: str, temperature: float) -> Iterator[str]:
         if not settings.enabled:
             raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
@@ -71,6 +91,45 @@ class LLMClient:
                     'content': '你是算法训练平台的 AI 助手。请严格返回 JSON 对象，字段仅包含 title、summary、bullets、line_refs。',
                 },
                 {'role': 'user', 'content': prompt},
+            ],
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        }
+        response = self._post_json(url, headers, payload)
+        content = response['choices'][0]['message']['content']
+        return self._parse_json_content(content)
+
+    def _call_openai_compatible_with_image(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        prompt: str,
+        temperature: float,
+        image_data_url: str,
+    ) -> dict:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/chat/completions'):
+            url = f'{url}/chat/completions'
+
+        payload = {
+            'model': model,
+            'temperature': temperature,
+            'response_format': {'type': 'json_object'},
+            'messages': [
+                {
+                    'role': 'system',
+                    'content': '你是算法训练平台的 AI 助手。请严格返回 JSON 对象。',
+                },
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': prompt},
+                        {'type': 'image_url', 'image_url': {'url': image_data_url}},
+                    ],
+                },
             ],
         }
         headers = {
@@ -228,6 +287,51 @@ class LLMClient:
         content = ''.join(item.get('text', '') for item in response.get('content', []) if item.get('type') == 'text')
         return self._parse_json_content(content)
 
+    def _call_anthropic_compatible_with_image(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        prompt: str,
+        temperature: float,
+        image_data_url: str,
+    ) -> dict:
+        media_type, data = self._parse_data_url(image_data_url)
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/messages'):
+            url = f'{url}/messages'
+
+        payload = {
+            'model': model,
+            'temperature': temperature,
+            'max_tokens': 2000,
+            'system': '你是算法训练平台的 AI 助手。请严格返回 JSON 对象。',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': prompt},
+                        {
+                            'type': 'image',
+                            'source': {
+                                'type': 'base64',
+                                'media_type': media_type,
+                                'data': data,
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+        }
+        response = self._post_json(url, headers, payload)
+        content = ''.join(item.get('text', '') for item in response.get('content', []) if item.get('type') == 'text')
+        return self._parse_json_content(content)
+
     def _stream_anthropic_compatible(
         self,
         settings: LLMSettings,
@@ -318,3 +422,13 @@ class LLMClient:
                 'bullets': [],
                 'line_refs': [],
             }
+
+    def _parse_data_url(self, value: str) -> tuple[str, str]:
+        prefix = 'data:'
+        if not value.startswith(prefix) or ',' not in value:
+            raise LLMClientError('上传的图片数据格式无效，请重新选择图片。')
+        header, data = value.split(',', 1)
+        if ';base64' not in header:
+            raise LLMClientError('当前仅支持 base64 编码的图片数据。')
+        media_type = header[len(prefix):].split(';', 1)[0].strip() or 'image/png'
+        return media_type, data

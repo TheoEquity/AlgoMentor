@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { parseProblemText } from '../lib/analysisApi'
 import { createProblem } from '../lib/problemApi'
@@ -6,7 +6,7 @@ import { listCompanies } from '../lib/companyApi'
 import { listCategories } from '../lib/categoryApi'
 import type { Company } from '../types/company'
 import type { ProblemCategory } from '../types/problemCategory'
-import type { ParsedProblemResult } from '../types/analysis'
+import type { ParseProblemPayload, ParsedProblemResult } from '../types/analysis'
 import type { ProblemCreatePayload, ProblemLatestStatus } from '../types/problem'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
 
@@ -51,9 +51,27 @@ function buildForm(parsed: ParsedProblemResult, rawText: string): EditableForm {
   }
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('图片读取失败'))
+    }
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
   const [activeTab, setActiveTab] = useState<CreateTab>('paste')
   const [rawText, setRawText] = useState('')
+  const [parseImageDataUrl, setParseImageDataUrl] = useState('')
+  const [parseImageName, setParseImageName] = useState('')
+  const [imageError, setImageError] = useState('')
   const [isParsing, setIsParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [parsed, setParsed] = useState<ParsedProblemResult | null>(null)
@@ -69,16 +87,59 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     void listCategories().then(setCategories).catch(() => {})
   }, [])
 
+  const buildParsePayload = (): ParseProblemPayload | null => {
+    const text = rawText.trim()
+    const hasImage = Boolean(parseImageDataUrl)
+
+    if (activeTab === 'image') {
+      if (!hasImage) {
+        return null
+      }
+      return {
+        mode: 'image_only',
+        image_data_url: parseImageDataUrl,
+        image_name: parseImageName,
+      }
+    }
+
+    if (text && hasImage) {
+      return {
+        mode: 'text_plus_image',
+        raw_text: text,
+        image_data_url: parseImageDataUrl,
+        image_name: parseImageName,
+      }
+    }
+
+    if (text) {
+      return {
+        mode: 'text_only',
+        raw_text: text,
+      }
+    }
+
+    if (hasImage) {
+      return {
+        mode: 'image_only',
+        image_data_url: parseImageDataUrl,
+        image_name: parseImageName,
+      }
+    }
+
+    return null
+  }
+
   const handleParse = async () => {
-    if (!rawText.trim()) {
+    const payload = buildParsePayload()
+    if (!payload) {
       return
     }
     setIsParsing(true)
     setParseError('')
     try {
-      const result = await parseProblemText(rawText)
+      const result = await parseProblemText(payload)
       setParsed(result)
-      setForm(buildForm(result, rawText))
+      setForm(buildForm(result, payload.raw_text ?? ''))
     } catch (error) {
       setParseError(error instanceof Error ? error.message : '解析失败')
     } finally {
@@ -88,11 +149,13 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
 
   const handleUseRaw = async () => {
     const text = rawText.trim()
-    if (!text) return
+    if (!text) {
+      return
+    }
     setIsParsing(true)
     setParseError('')
     try {
-      const result = await parseProblemText(text)
+      const result = await parseProblemText({ mode: 'text_only', raw_text: text })
       setParsed(result)
       setForm(buildForm(result, text))
     } catch (error) {
@@ -100,6 +163,31 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     } finally {
       setIsParsing(false)
     }
+  }
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    setImageError('')
+    if (!file.type.startsWith('image/')) {
+      setImageError('请选择 PNG、JPG、WEBP 等图片文件。')
+      return
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setParseImageDataUrl(dataUrl)
+      setParseImageName(file.name)
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : '图片读取失败')
+    }
+  }
+
+  const clearImage = () => {
+    setParseImageDataUrl('')
+    setParseImageName('')
+    setImageError('')
   }
 
   const updateForm = (field: keyof EditableForm, value: string) => {
@@ -166,12 +254,18 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     }
   }
 
+  const canAiParse = activeTab === 'paste'
+    ? Boolean(rawText.trim() || parseImageDataUrl)
+    : activeTab === 'image'
+      ? Boolean(parseImageDataUrl)
+      : false
+
   return (
     <section className="detail-layout">
       <div className="page-header">
         <div>
           <h1>新增题目</h1>
-            <p>手工粘贴原始题面，AI 解析提取结构化字段，规则解析保留原文排版。</p>
+          <p>文本优先导入，图片用于公式和复杂排版校对；只有图片时也支持直接解析。</p>
         </div>
         <button type="button" className="button ghost" onClick={onBack}>
           返回题库
@@ -203,144 +297,191 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
       </div>
 
       {activeTab === 'paste' ? (
-        <div>
-          <textarea
-            className="settings-textarea parse-textarea"
-            placeholder="将题目原文（如牛客、Leetcode 页面内容）粘贴到此处。规则解析保留原始排版自动生成 Markdown 格式，AI 解析提取结构化字段。"
-            value={rawText}
-            onChange={(event) => setRawText(event.target.value)}
-          />
+        <div className="detail-card">
+          <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+            <span>题面文本</span>
+            <textarea
+              className="settings-textarea parse-textarea"
+              placeholder="将题目原文粘贴到此处。推荐同时上传题面截图，用于修正数学公式、分式、上下标和复杂排版。"
+              style={{ minHeight: '480px', height: '480px' }}
+              value={rawText}
+              onChange={(event) => setRawText(event.target.value)}
+            />
+          </label>
 
-          <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-            <button type="button" className="button primary" disabled={isParsing || !rawText.trim()} onClick={() => void handleParse()}>
-              {isParsing ? 'AI 解析中...' : 'AI 解析'}
+          <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+            <span>辅助截图（可选）</span>
+            <input type="file" accept="image/*" onChange={(event) => void handleImageChange(event)} />
+          </label>
+
+          {parseImageDataUrl ? (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                <strong>{parseImageName}</strong>
+                <button type="button" className="button ghost" onClick={clearImage}>移除图片</button>
+              </div>
+              <img src={parseImageDataUrl} alt={parseImageName || '题面截图'} style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 12, border: '1px solid var(--border-subtle)' }} />
+            </div>
+          ) : null}
+
+          <div className="backend-note" style={{ marginBottom: 'var(--space-3)' }}>
+            文本负责主内容结构，截图负责校对公式和复杂排版。只粘贴文本时仍可使用规则解析快速生成草稿。
+          </div>
+
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="button primary" disabled={isParsing || !canAiParse} onClick={() => void handleParse()}>
+              {isParsing ? '智能解析中...' : '智能解析'}
             </button>
             <button type="button" className="button" disabled={isParsing || !rawText.trim()} onClick={() => void handleUseRaw()}>
               规则解析
             </button>
+            {imageError ? <span className="save-error-text">{imageError}</span> : null}
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>
-
-          {form ? (
-            <div style={{ marginTop: 'var(--space-5)' }}>
-              <div className="problem-edit-actions">
-                <button type="button" className="button primary" disabled={isCreating} onClick={() => void handleCreate()}>
-                  {isCreating ? '创建中...' : '创建题目'}
-                </button>
-                {parsed?.analysis ? <span className="save-success-text">{parsed.analysis}</span> : null}
-                {createError ? <span className="save-error-text">创建失败：{createError}</span> : null}
-              </div>
-
-              <div className="problem-overview-grid" style={{ marginTop: 'var(--space-4)' }}>
-                <article className="detail-card problem-statement-card">
-                  <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
-                    <span>标题</span>
-                    <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
-                  </label>
-                  <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
-                    <span>题目正文 (Markdown)</span>
-                    <textarea
-                      className="settings-textarea"
-                      rows={16}
-                      value={form.statement_markdown}
-                      onChange={(event) => updateForm('statement_markdown', event.target.value)}
-                    />
-                  </label>
-                  {form.statement_markdown ? (
-                    <>
-                      <h3 style={{ marginTop: 'var(--space-3)' }}>预览</h3>
-                      <MarkdownRenderer markdown={form.statement_markdown} />
-                    </>
-                  ) : null}
-                </article>
-
-                <aside className="detail-card">
-                  <h2>题目属性</h2>
-                  <div className="settings-form-grid problem-edit-grid">
-                    <label className="settings-field">
-                      <span>题型</span>
-                      <select value={form.category_slug} onChange={(event) => updateForm('category_slug', event.target.value)}>
-                        {form.category_slug && categories.every((item) => item.slug !== form.category_slug) ? (
-                          <option value={form.category_slug}>{form.category_slug}</option>
-                        ) : null}
-                        {categories.map((item) => (
-                          <option key={item.slug} value={item.slug}>{item.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>公司</span>
-                      <select value={form.company} onChange={(event) => updateForm('company', event.target.value)}>
-                        {form.company && companies.every((item) => item.name !== form.company) ? (
-                          <option value={form.company}>{form.company}</option>
-                        ) : null}
-                        {companies.map((item) => (
-                          <option key={item.id} value={item.name}>{item.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>难度</span>
-                      <select value={form.difficulty} onChange={(event) => updateForm('difficulty', event.target.value)}>
-                        <option value="Easy">Easy</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Hard">Hard</option>
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>频率</span>
-                      <select value={form.frequency} onChange={(event) => updateForm('frequency', event.target.value)}>
-                        <option value="高">高</option>
-                        <option value="中">中</option>
-                        <option value="低">低</option>
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>年度</span>
-                      <input value={form.year} onChange={(event) => updateForm('year', event.target.value)} />
-                    </label>
-                    <label className="settings-field">
-                      <span>来源</span>
-                      <select value={form.source} onChange={(event) => updateForm('source', event.target.value)}>
-                        <option value="牛客">牛客</option>
-                        <option value="Leetcode">Leetcode</option>
-                        <option value="手工">手工</option>
-                        <option value="AI派生">AI派生</option>
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>最新状态</span>
-                      <select value="未开始" disabled>
-                        <option value="未开始">未开始</option>
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>时间限制 (ms)</span>
-                      <input value={form.time_limit_ms} onChange={(event) => updateForm('time_limit_ms', event.target.value)} />
-                    </label>
-                    <label className="settings-field">
-                      <span>空间限制 (KB)</span>
-                      <input value={form.memory_limit_kb} onChange={(event) => updateForm('memory_limit_kb', event.target.value)} />
-                    </label>
-                  </div>
-                </aside>
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : activeTab === 'pdf' ? (
         <div className="detail-card">
           <div className="empty-panel">
-            PDF 导入功能即将上线。将支持上传 PDF 文件，自动提取文档中的题目内容并结构化为题目数据。
+            PDF 导入功能即将上线。后续会接入文档解析后直接进入同一套结构化导题流程。
           </div>
         </div>
       ) : (
         <div className="detail-card">
-          <div className="empty-panel">
-            图像识别功能即将上线。将支持上传题目截图，通过 OCR 和多模态模型自动提取并结构化题目内容。
+          <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+            <span>题面图片</span>
+            <input type="file" accept="image/*" onChange={(event) => void handleImageChange(event)} />
+          </label>
+
+          {parseImageDataUrl ? (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                <strong>{parseImageName}</strong>
+                <button type="button" className="button ghost" onClick={clearImage}>移除图片</button>
+              </div>
+              <img src={parseImageDataUrl} alt={parseImageName || '题面截图'} style={{ maxWidth: '100%', maxHeight: 360, borderRadius: 12, border: '1px solid var(--border-subtle)' }} />
+            </div>
+          ) : null}
+
+          <div className="backend-note" style={{ marginBottom: 'var(--space-3)' }}>
+            仅图片模式会直接依赖 AI 恢复正文、样例和数学公式。截图越清晰，识别效果越稳定。
+          </div>
+
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="button primary" disabled={isParsing || !canAiParse} onClick={() => void handleParse()}>
+              {isParsing ? '图像解析中...' : '图像解析'}
+            </button>
+            {imageError ? <span className="save-error-text">{imageError}</span> : null}
+            {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>
         </div>
       )}
+
+      {form ? (
+        <div style={{ marginTop: 'var(--space-5)' }}>
+          <div className="problem-edit-actions">
+            <button type="button" className="button primary" disabled={isCreating} onClick={() => void handleCreate()}>
+              {isCreating ? '创建中...' : '创建题目'}
+            </button>
+            {parsed?.analysis ? <span className="save-success-text">{parsed.analysis}</span> : null}
+            {createError ? <span className="save-error-text">创建失败：{createError}</span> : null}
+          </div>
+
+          <div className="problem-overview-grid" style={{ marginTop: 'var(--space-4)' }}>
+            <article className="detail-card problem-statement-card">
+              <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+                <span>标题</span>
+                <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
+              </label>
+              <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+                <span>题目正文 (Markdown)</span>
+                <textarea
+                  className="settings-textarea"
+                  rows={16}
+                  value={form.statement_markdown}
+                  onChange={(event) => updateForm('statement_markdown', event.target.value)}
+                />
+              </label>
+              {form.statement_markdown ? (
+                <>
+                  <h3 style={{ marginTop: 'var(--space-3)' }}>预览</h3>
+                  <MarkdownRenderer className="problem-markdown" markdown={form.statement_markdown} />
+                </>
+              ) : null}
+            </article>
+
+            <aside className="detail-card">
+              <h2>题目属性</h2>
+              <div className="settings-form-grid problem-edit-grid">
+                <label className="settings-field">
+                  <span>题型</span>
+                  <select value={form.category_slug} onChange={(event) => updateForm('category_slug', event.target.value)}>
+                    {form.category_slug && categories.every((item) => item.slug !== form.category_slug) ? (
+                      <option value={form.category_slug}>{form.category_slug}</option>
+                    ) : null}
+                    {categories.map((item) => (
+                      <option key={item.slug} value={item.slug}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>公司</span>
+                  <select value={form.company} onChange={(event) => updateForm('company', event.target.value)}>
+                    {form.company && companies.every((item) => item.abbreviation !== form.company) ? (
+                      <option value={form.company}>{form.company}</option>
+                    ) : null}
+                    {companies.map((item) => (
+                      <option key={item.id} value={item.abbreviation}>{item.abbreviation}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>难度</span>
+                  <select value={form.difficulty} onChange={(event) => updateForm('difficulty', event.target.value)}>
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>频率</span>
+                  <select value={form.frequency} onChange={(event) => updateForm('frequency', event.target.value)}>
+                    <option value="高">高</option>
+                    <option value="中">中</option>
+                    <option value="低">低</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>年度</span>
+                  <input value={form.year} onChange={(event) => updateForm('year', event.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>来源</span>
+                  <select value={form.source} onChange={(event) => updateForm('source', event.target.value)}>
+                    <option value="牛客">牛客</option>
+                    <option value="Leetcode">Leetcode</option>
+                    <option value="手工">手工</option>
+                    <option value="AI派生">AI派生</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>最新状态</span>
+                  <select value="未开始" disabled>
+                    <option value="未开始">未开始</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>时间限制 (ms)</span>
+                  <input value={form.time_limit_ms} onChange={(event) => updateForm('time_limit_ms', event.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>空间限制 (KB)</span>
+                  <input value={form.memory_limit_kb} onChange={(event) => updateForm('memory_limit_kb', event.target.value)} />
+                </label>
+              </div>
+            </aside>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

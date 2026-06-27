@@ -240,7 +240,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       <div className="problem-overview-grid">
         <article className="detail-card problem-statement-card">
           <h2>题面</h2>
-          <MarkdownRenderer markdown={problem.statement_markdown} />
+          <MarkdownRenderer className="problem-markdown" markdown={problem.statement_markdown} />
         </article>
 
         <aside className="detail-card">
@@ -262,10 +262,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
             <label className="settings-field">
               <span>公司</span>
               <select value={form.company} onChange={(event) => handleFieldChange('company', event.target.value)}>
-                {form.company && companies.every((item) => item.name !== form.company) ? <option value={form.company}>{form.company}</option> : null}
+                {form.company && companies.every((item) => item.abbreviation !== form.company) ? <option value={form.company}>{form.company}</option> : null}
                 {companies.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name}
+                  <option key={item.id} value={item.abbreviation}>
+                    {item.abbreviation}
                   </option>
                 ))}
               </select>

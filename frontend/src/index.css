@@ -778,6 +778,18 @@ a {
   min-height: 280px;
 }
 
+.problem-statement-card,
+.statement-panel section {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+}
+
+.statement-panel section {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
 .problem-edit-actions {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -1629,6 +1641,160 @@ code {
 
 .markdown-body .katex {
   font-size: 1.05em;
+}
+
+.problem-markdown {
+  font-size: 15px;
+  line-height: 1.85;
+  color: #1f2937;
+}
+
+.problem-markdown h2,
+.problem-markdown h3 {
+  color: #111827;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.problem-markdown .problem-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.6rem 0 0.9rem;
+  letter-spacing: 0.01em;
+}
+
+.problem-markdown .problem-section-heading::before {
+  content: '';
+  width: 6px;
+  height: 1.05em;
+  border-radius: 999px;
+  background: #2563eb;
+  flex: 0 0 auto;
+}
+
+.problem-markdown .problem-section-heading:first-child {
+  margin-top: 0;
+}
+
+.problem-markdown .problem-section-input::before {
+  background: #0f766e;
+}
+
+.problem-markdown .problem-section-output::before {
+  background: #b45309;
+}
+
+.problem-markdown .problem-section-notes::before {
+  background: #64748b;
+}
+
+.problem-markdown .problem-section-samples::before {
+  background: #7c3aed;
+}
+
+.problem-markdown .problem-sample-heading {
+  font-size: 0.98rem;
+  margin: 1.15rem 0 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.problem-markdown p {
+  margin-bottom: 0.9rem;
+}
+
+.problem-markdown .problem-io-label {
+  margin: 0.85rem 0 0.45rem;
+}
+
+.problem-markdown .problem-io-label strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.problem-markdown .problem-io-label + pre {
+  margin-top: 0;
+}
+
+.problem-markdown ol,
+.problem-markdown ul {
+  padding-left: 1.3rem;
+  margin-bottom: 1rem;
+}
+
+.problem-markdown li {
+  margin-bottom: 0.35rem;
+}
+
+.problem-markdown .katex {
+  font-size: 1.12em;
+}
+
+.problem-markdown .katex-display {
+  margin: 1rem 0;
+}
+
+.problem-markdown pre {
+  background: #f8fafc;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  padding: 0.95rem 1rem;
+}
+
+.problem-markdown pre code {
+  font-size: 0.9rem;
+}
+
+.problem-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.95em;
+}
+
+.problem-markdown th,
+.problem-markdown td {
+  border: 1px solid #d7dee8;
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.problem-markdown th {
+  background: #f8fafc;
+  color: #111827;
+  font-weight: 600;
+}
+
+.problem-markdown blockquote {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.problem-markdown hr {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 1.25rem 0;
+}
+
+.problem-markdown sup,
+.problem-markdown sub {
+  line-height: 0;
 }
 
 @media (max-width: 900px) {

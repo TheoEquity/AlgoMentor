@@ -923,7 +923,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                   <article className="statement-panel">
                     <section>
                       <h2>题面</h2>
-                      <MarkdownRenderer markdown={problem.statement_markdown} />
+                      <MarkdownRenderer className="problem-markdown" markdown={problem.statement_markdown} />
                     </section>
                   </article>
 

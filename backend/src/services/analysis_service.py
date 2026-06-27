@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
+from config import Settings
+from repositories.company_repository import CompanyRepository
 from schemas.analysis import AnalysisLineRef, AnalysisResponse, ParsedProblemResult, ProblemChatMessage
 from schemas.llm_settings import LLMSettings
 from schemas.problems import ProblemDetail
@@ -14,6 +16,7 @@ from services.llm_client import LLMClient, LLMClientError
 class AnalysisService:
     def __init__(self):
         self.client = LLMClient()
+        self._company_repo: CompanyRepository | None = None
 
     def analyze_solution(self, settings: LLMSettings, api_key: str, problem: ProblemDetail, language: str, code_text: str) -> AnalysisResponse:
         prompt = self._build_solution_prompt(problem, language, code_text)
@@ -729,18 +732,156 @@ class AnalysisService:
             verdict=None,
         )
 
-    def parse_problem_text(self, settings: LLMSettings, api_key: str, raw_text: str) -> ParsedProblemResult:
-        result = self._parse_rule_based(raw_text)
-        if result and self._needs_formula_enrichment(raw_text):
-            result = self._enrich_formulas(result)
-        if result:
+    def parse_problem_text(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        raw_text: str,
+        *,
+        mode: str = 'text_only',
+        image_data_url: str = '',
+        image_name: str = '',
+    ) -> ParsedProblemResult:
+        text = self._clean_fragmented_problem_text(raw_text).strip()
+        has_text = bool(text)
+        has_image = bool(image_data_url.strip())
+
+        if not has_text and not has_image:
+            return self._fallback_parse(settings, '')
+
+        rule_result = self._parse_rule_based(text) if has_text else None
+        if rule_result and self._needs_formula_enrichment(text):
+            rule_result = self._enrich_formulas(rule_result)
+
+        if mode == 'text_only' and rule_result:
+            rule_result.company = self._normalize_company_abbreviation(rule_result.company)
+            return rule_result
+
+        if not has_image:
+            prompt = self._build_parse_prompt(text)
+            try:
+                payload = self.client.generate_json(settings, api_key, settings.solution_model, settings.solution_temperature, prompt)
+            except LLMClientError:
+                if rule_result is not None:
+                    rule_result.company = self._normalize_company_abbreviation(rule_result.company)
+                return rule_result or self._fallback_parse(settings, text)
+            result = self._merge_parse_results(rule_result, self._build_parse_result(settings, payload), text)
+            result.company = self._normalize_company_abbreviation(result.company)
             return result
-        prompt = self._build_parse_prompt(raw_text)
+
+        prompt = self._build_multimodal_parse_prompt(text, mode, image_name)
         try:
-            payload = self.client.generate_json(settings, api_key, settings.solution_model, settings.solution_temperature, prompt)
+            payload = self.client.generate_json_with_image(
+                settings,
+                api_key,
+                settings.solution_model,
+                prompt,
+                settings.solution_temperature,
+                image_data_url,
+            )
         except LLMClientError:
-            return self._fallback_parse(settings, raw_text)
-        return self._build_parse_result(settings, payload)
+            if rule_result is not None:
+                rule_result.company = self._normalize_company_abbreviation(rule_result.company)
+                return rule_result
+            return self._fallback_image_parse(settings, image_name)
+
+        result = self._merge_parse_results(rule_result, self._build_parse_result(settings, payload), text)
+        result.company = self._normalize_company_abbreviation(result.company)
+        return result
+
+    def _merge_parse_results(
+        self,
+        base: ParsedProblemResult | None,
+        overlay: ParsedProblemResult,
+        raw_text: str,
+    ) -> ParsedProblemResult:
+        if base is None:
+            if raw_text and self._needs_formula_enrichment(raw_text):
+                overlay = self._enrich_formulas(overlay)
+            return overlay
+
+        merged = base.model_copy(deep=True)
+        for field_name in merged.__class__.model_fields:
+            new_value = getattr(overlay, field_name)
+            if field_name == 'examples':
+                if new_value:
+                    merged.examples = new_value
+                continue
+            if field_name == 'tags':
+                if new_value:
+                    merged.tags = new_value
+                continue
+            if field_name == 'year':
+                if new_value is not None:
+                    merged.year = new_value
+                continue
+            if isinstance(new_value, str):
+                if new_value.strip():
+                    setattr(merged, field_name, new_value)
+                continue
+            if isinstance(new_value, int):
+                if new_value > 0:
+                    setattr(merged, field_name, new_value)
+                continue
+            if new_value is not None:
+                setattr(merged, field_name, new_value)
+
+        if raw_text and self._needs_formula_enrichment(raw_text):
+            merged = self._enrich_formulas(merged)
+        return merged
+
+    def _fallback_image_parse(self, settings: LLMSettings, image_name: str) -> ParsedProblemResult:
+        title = image_name.rsplit('.', 1)[0].strip() if image_name.strip() else '图片导入题目'
+        return ParsedProblemResult(
+            slug='',
+            title=title or '图片导入题目',
+            company='',
+            difficulty='Medium',
+            category_slug='simulation',
+            statement_markdown=self._normalize_markdown(
+                '## 题目描述\n\n图片识别当前未完成，请检查 AI 配置后重试，或补充可复制题面文本。\n\n## 输入格式\n\n(待识别)\n\n## 输出格式\n\n(待识别)\n'
+            ),
+            tags=[],
+            time_limit_ms=2000,
+            memory_limit_kb=262144,
+            source='手工',
+            source_type='image',
+            frequency='中',
+            year=None,
+            source_ref='',
+            external_id='',
+            examples=[],
+            analysis='当前仅图片导入依赖 AI 解析，建议检查模型配置或补充题面文本。',
+        )
+
+    def _normalize_company_abbreviation(self, company: str) -> str:
+        value = company.strip()
+        if not value:
+            return value
+
+        try:
+            if self._company_repo is None:
+                self._company_repo = CompanyRepository(Settings().database_url)
+            companies = self._company_repo.list_companies()
+        except Exception:
+            return value
+
+        lowered = value.lower()
+        for item in companies:
+            candidates = [item.abbreviation.strip(), item.name.strip(), item.name_en.strip()]
+            if any(candidate and candidate == value for candidate in candidates):
+                return item.abbreviation.strip() or item.name.strip() or value
+            if any(candidate and candidate.lower() == lowered for candidate in candidates):
+                return item.abbreviation.strip() or item.name.strip() or value
+
+        for item in companies:
+            candidates = [item.abbreviation.strip(), item.name.strip(), item.name_en.strip()]
+            if any(candidate and candidate in value for candidate in candidates):
+                return item.abbreviation.strip() or item.name.strip() or value
+            if any(candidate and candidate.lower() in lowered for candidate in candidates):
+                return item.abbreviation.strip() or item.name.strip() or value
+
+        return value
 
     def _needs_formula_enrichment(self, text: str) -> bool:
         import re
@@ -750,6 +891,8 @@ class AnalysisService:
             r'[CPE]\s*[(\[]', 
             r'\^\{', r'_\{(?!\d+\})',
             r'\\frac', r'\\sum', r'\\binom',
+            r'\\leq', r'\\geq', r'\\dots', r'\\cdots',
+            r'\b[a-zA-Z]+_[a-zA-Z0-9]+\b',
             r'\d+/\d+', r'\([^)]*\)\s*\^\s*[a-z]',
         ]
         return any(re.search(p, text) for p in patterns)
@@ -874,8 +1017,27 @@ class AnalysisService:
         # 6. x^2 → $x^2$ (单数字指数)
         protected = _apply_outside_math(protected, _LB + '(' + _W + r')\^(\d)' + _LA, lambda m: _latex_inline(m.group(1) + '^{' + m.group(2) + '}'))
 
+        # 6.1 变量列表 + 约束括号整体转成数学表达，避免后续规则拆碎
+        protected = _apply_outside_math(
+            protected,
+            r'\b([a-zA-Z](?:\s*,\s*[a-zA-Z])+?)\(([^()\n]*\\(?:leq|geq)[^()\n]*)\)',
+            lambda m: _latex_inline(m.group(1).strip()) + '(' + _latex_inline(m.group(2).strip()) + ')',
+        )
+        protected = _apply_outside_math(
+            protected,
+            r'\b([a-zA-Z]+_\d+(?:\s*,\s*[a-zA-Z]+_\d+)*(?:\s*,\s*\\dots\s*,\s*[a-zA-Z]+_[a-zA-Z0-9]+)?)\(([^()\n]*\\(?:leq|geq)[^()\n]*)\)',
+            lambda m: _latex_inline(m.group(1).strip()) + '(' + _latex_inline(m.group(2).strip()) + ')',
+        )
+
         # 7. x_i → $x_i$
         protected = _apply_outside_math(protected, _LB2 + '(' + _W + r')_(' + _W + ')' + _LA, lambda m: _latex_inline(m.group(1) + '_' + m.group(2)))
+
+        # 7.1 x, y, n, k 这种单变量出现在中文语境里时转成行内公式
+        protected = _apply_outside_math(
+            protected,
+            r'(?<=[\u4e00-\u9fff])\s+([a-zA-Z])\s+(?=[\u4e00-\u9fff])',
+            lambda m: f' {_latex_inline(m.group(1))} ',
+        )
 
         # 8. Σ → $\sum$
         protected = _apply_outside_math(protected, r'Σ', lambda m: _latex_inline(r'\sum'))
@@ -898,13 +1060,124 @@ class AnalysisService:
         # 12. 数学中文后紧跟的数学表达式 (如: 概率 P(X=k))
         protected = _apply_outside_math(protected, r'(概率|期望|方差)\s*([=＝]\s*[a-zA-Z0-9_\s\+\-\*/\(\)\^\.]+)', lambda m: f'{m.group(1)} {_latex_inline(m.group(2).strip())}')
 
+        # 13. 合并被提前拆开的约束公式，如 ($1 \leq n \leq $10^{5}$$)
+        protected = re.sub(
+            r'\(\$([^$]*?)\$\s*([^$]*?)\$\$\)',
+            lambda m: '(' + _latex_inline((m.group(1) + m.group(2)).strip()) + ')',
+            protected,
+        )
+
+        # 14. 常见中文语境里的单变量统一转成行内公式
+        protected = _apply_outside_math(
+            protected,
+            r'(有|第|这|每通过|输入|输出|整数|关卡数量和获得跳关道具的条件。|小红通过这)\s+([a-zA-Z])\s+(个|行|的|上|后|前|关卡)',
+            lambda m: f'{m.group(1)} {_latex_inline(m.group(2))} {m.group(3)}',
+        )
+
         result.statement_markdown = _restore(protected, code_blocks)
         return result
+
+    def _repair_fragmented_math_markdown(self, markdown: str) -> str:
+        import re
+
+        text = markdown.replace('\u200b', '').replace('\xa0', ' ')
+
+        text = re.sub(r'长度为\s*\n\s*n\s*\n\s*n\s+的数组', '长度为 $n$ 的数组', text)
+        text = re.sub(r'数组中的每个元素\s*\n\s*a\s*\n\s*i(?:\s*\n\s*a\s*\n\s*i)?\s*\n*\s*满足', '数组中的每个元素 $a_i$ 满足', text)
+        text = re.sub(
+            r'0\s*\n\s*(?:\$\\leq\$|≤|\\leq)\s*\n\s*a\s*\n\s*i\s*\n\s*<\s*\n\s*2\s*\n\s*k(?:\s*\n\s*0\s*(?:\$\\leq\$|≤|\\leq)\s*a\s*\n\s*i\s*\n\s*<2\s*\n\s*k)?',
+            lambda _: '$0 \\leq a_i < 2^k$',
+            text,
+        )
+        text = re.sub(
+            r'a\s*\n\s*1\s*\n\s*⊕\s*\n\s*a\s*\n\s*2\s*\n\s*⊕\s*\n\s*⋯\s*\n\s*⊕\s*\n\s*a\s*\n\s*n\s*\n\s*(?:\$\\leq\$|≤|\\leq)\s*\n\s*a\s*\n\s*1\s*\n\s*&\s*\n\s*a\s*\n\s*2\s*\n\s*&\s*\n\s*⋯\s*\n\s*&\s*\n\s*a\s*\n\s*n(?:\s*\n\s*a\s*\n\s*1\s*\n\s*⊕\s*a\s*\n\s*2\s*\n\s*⊕⋯⊕a\s*\n\s*n\s*\n\s*\$\\leq\$a\s*\n\s*1\s*\n\s*&a\s*\n\s*2\s*\n\s*&⋯&a\s*\n\s*n)?',
+            lambda _: '$a_1 \\oplus a_2 \\oplus \\cdots \\oplus a_n \\leq a_1 \\& a_2 \\& \\cdots \\& a_n$',
+            text,
+        )
+        text = re.sub(r'第一行输入两个整数\s+n\s+和\s+k。', '第一行输入两个整数 $n$ 和 $k$。', text)
+        text = re.sub(r'(?<!\$)1\s*\\leq\s*n\s*\\leq\s*\$10\^\{5\}\$(?!\$)', lambda _: '$1 \\leq n \\leq 10^{5}$', text)
+        text = re.sub(r'(?<!\$)0\s*\\leq\s*k\s*\\leq\s*\$10\^\{5\}\$(?!\$)', lambda _: '$0 \\leq k \\leq 10^{5}$', text)
+        text = re.sub(r'请对\s*\$10\^\{9\}\$\s*\+\s*7\s*取模', '请对 $10^{9} + 7$ 取模', text)
+        text = re.sub(r'(\$a_i\$ 满足)\s*\n\s*(\$0 \\leq a_i < 2\^k\$)', r'\1 \2', text)
+        text = re.sub(r'(与和。即)\s*\n\s*(\$a_1 \\oplus a_2 \\oplus \\cdots \\oplus a_n \\leq a_1 \\& a_2 \\& \\cdots \\& a_n\$)', r'\1 \2', text)
+        text = re.sub(r'(第一行输入两个整数 \$n\$ 和 \$k\$。)\s*\n\s*(\$1 \\leq n \\leq 10\^\{5\}\$)', r'\1\n\n\2', text)
+        text = re.sub(r'(\$1 \\leq n \\leq 10\^\{5\}\$)\s*\n\s*(\$0 \\leq k \\leq 10\^\{5\}\$)', r'\1\n\2', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    def _clean_fragmented_problem_text(self, raw_text: str) -> str:
+        text = raw_text.replace('\u200b', '').replace('\u2009', ' ').replace('\u202f', ' ').replace('\xa0', ' ')
+        text = text.replace('\\left(', '(').replace('\\right)', ')').replace('\\left[', '[').replace('\\right]', ']')
+        text = text.replace('\\left\{', '{').replace('\\right\}', '}')
+
+        raw_lines = text.splitlines()
+        lines: list[str] = []
+        for raw_line in raw_lines:
+            line = raw_line.replace('\t', ' ')
+            line = re.sub(r'^(?:\\,\s*)+', '', line)
+            line = re.sub(r'\s+', ' ', line).strip()
+            if not line:
+                if lines and lines[-1] != '':
+                    lines.append('')
+                continue
+            if re.fullmatch(r'(?:\\,|[,，.·•])+', line):
+                continue
+            lines.append(line)
+
+        merged: list[str] = []
+        i = 0
+        token_pattern = re.compile(r'[A-Za-z][A-Za-z0-9]*|\d+')
+        while i < len(lines):
+            line = lines[i]
+            if line == '':
+                if merged and merged[-1] != '':
+                    merged.append('')
+                i += 1
+                continue
+
+            if i + 2 < len(lines):
+                token = lines[i + 1]
+                tail = lines[i + 2]
+                if token_pattern.fullmatch(token) and tail.startswith(token):
+                    rest = tail[len(token):].strip()
+                    combined = f'{line} {token}'
+                    if rest:
+                        combined = f'{combined} {rest}'
+                    merged.append(combined.strip())
+                    i += 3
+                    continue
+
+            if i + 3 < len(lines):
+                base = lines[i + 1]
+                sub = lines[i + 2]
+                if re.fullmatch(r'[A-Za-z]', base) and token_pattern.fullmatch(sub):
+                    j = i + 3
+                    while j + 1 < len(lines) and lines[j] == base and lines[j + 1] == sub:
+                        j += 2
+                    if j < len(lines) and lines[j] != '':
+                        merged.append(f'{line} {base}_{sub} {lines[j]}'.strip())
+                        i = j + 1
+                        continue
+
+            merged.append(line)
+            i += 1
+
+        cleaned = '\n'.join(merged)
+        cleaned = re.sub(r'第\s*\n\s*([A-Za-z0-9]+)\s*\n\s*\1(?=\s*个)', r'第 \1', cleaned)
+        cleaned = re.sub(r'\b([A-Za-z])\s+([A-Za-z0-9]+)_\1\s+\2\b', r'\1_\2', cleaned)
+        cleaned = re.sub(r'\b([A-Za-z])\s*\n\s*([A-Za-z0-9]+)\s+\1_\2\s+\1\s*\n*\s*\2\b', r'\1_\2', cleaned)
+        cleaned = re.sub(r'\b([A-Za-z])\s*\n\s*([A-Za-z0-9]+)_\1\s*\n+\s*\2\b', r'\1_\2', cleaned)
+        cleaned = re.sub(r'\b([A-Za-z])\s*\n\s*([A-Za-z0-9]+)(?:\s+\1_\2)+(?:\s+\1\s*\n*\s*\2)*\b', r'\1_\2', cleaned)
+        cleaned = re.sub(r'\b([A-Za-z])_([A-Za-z0-9]+)\s+\1\s*\n+\s*\2\b', r'\1_\2', cleaned)
+        cleaned = re.sub(r'([A-Za-z0-9_\$\)])\s*\n\s*(?=[\u4e00-\u9fff])', r'\1 ', cleaned)
+        cleaned = re.sub(r'^\s*\d+[.、]\s*\n(?=\S)', '', cleaned)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        return cleaned.strip()
 
     def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
         import re
 
-        text = raw_text.strip()
+        text = self._clean_fragmented_problem_text(raw_text).strip()
         if not text or len(text) < 20:
             return None
 
@@ -948,6 +1221,8 @@ class AnalysisService:
         lines = [l.rstrip() for l in clean.split('\n')]
         stripped_lines = [l.strip() for l in lines if l.strip()]
         first_line = stripped_lines[0].lstrip('#').strip() if stripped_lines else ''
+        if re.fullmatch(r'\d+[.、]?', first_line) and len(stripped_lines) > 1:
+            first_line = stripped_lines[1].lstrip('#').strip()
         title = first_line if first_line and not first_line.startswith(('##', '输入', '输出', '示例', '样例', '**')) else '未命名题目'
 
         desc_start = 0
@@ -1011,6 +1286,9 @@ class AnalysisService:
                 if explanation:
                     examples_section += f'**说明：**\n{explanation}\n\n'
             markdown = markdown.strip() + examples_section
+
+        markdown = self._repair_fragmented_math_markdown(markdown)
+        markdown = self._normalize_markdown(markdown)
 
         _CATEGORY_KW: dict[str, list[str]] = {
             'two-pointers': ['双指针', '快慢指针', '对撞指针'],
@@ -1101,6 +1379,29 @@ class AnalysisService:
             '17. analysis 简要分析此题考察的算法点和解题思路（1-2 句）。\n\n'
             '返回 JSON 格式，不要包含 markdown 代码块标记。\n\n'
             f'原始文本：\n{raw_text}'
+        )
+
+    def _build_multimodal_parse_prompt(self, raw_text: str, mode: str, image_name: str) -> str:
+        input_strategy = {
+            'image_only': '当前只有题面图片，请直接依据图片恢复题面结构、样例和数学公式。',
+            'text_plus_image': '当前同时提供了文本和图片。请以文本为主线，以图片校正数学公式、分式、上下标、表格和复杂排版。',
+        }.get(mode, '当前同时提供了文本和图片。请优先从两者中恢复最准确的题面。')
+        text_section = f'原始文本：\n{raw_text}\n\n' if raw_text.strip() else ''
+        image_section = f'图片文件名：{image_name}\n' if image_name.strip() else ''
+        return (
+            '你是一个算法竞赛题目结构化的专家。请结合提供的文本和图片，将题目解析为结构化 JSON。\n\n'
+            f'{input_strategy}\n'
+            '要求：\n'
+            '1. 返回字段与普通题目解析一致：slug、title、company、difficulty、category_slug、statement_markdown、tags、time_limit_ms、memory_limit_kb、source、source_type、frequency、year、source_ref、external_id、examples、analysis。\n'
+            '2. statement_markdown 必须整理成规范 Markdown，包含 `## 题目描述`、`## 输入格式`、`## 输出格式`、`## 样例` 等结构。\n'
+            '3. 数学公式必须转成 LaTeX。行内公式使用 `$...$`，独立公式使用 `$$...$$`。\n'
+            '4. 当文本与图片冲突时，普通正文优先保留语义更完整的一方，数学公式和复杂排版优先以图片结构为准。\n'
+            '5. examples 中提取所有样例，每个样例包含 input、output、explanation。\n'
+            '6. analysis 用 1-2 句概括考察点和解题思路。\n'
+            '7. 仅返回 JSON，不要包裹 markdown 代码块。\n\n'
+            f'{image_section}'
+            f'{text_section}'
+            '请开始解析。'
         )
 
     def _build_parse_result(self, settings: LLMSettings, payload: dict) -> ParsedProblemResult:

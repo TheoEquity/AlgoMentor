@@ -89,3 +89,10 @@ export type ParsedProblemResult = {
   examples: ParsedExample[]
   analysis: string
 }
+
+export type ParseProblemPayload = {
+  mode: 'text_only' | 'image_only' | 'text_plus_image'
+  raw_text?: string
+  image_data_url?: string
+  image_name?: string
+}

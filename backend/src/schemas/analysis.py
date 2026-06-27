@@ -91,7 +91,10 @@ class ErrorAttributionRecord(BaseModel):
 class ParseProblemRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    raw_text: str = Field(min_length=10)
+    mode: Literal['text_only', 'image_only', 'text_plus_image'] = 'text_only'
+    raw_text: str = ''
+    image_data_url: str = ''
+    image_name: str = ''
 
 
 class ParsedExample(BaseModel):
