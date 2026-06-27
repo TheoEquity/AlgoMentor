@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -29,26 +30,31 @@ def main() -> int:
     try:
         with connection, connection.cursor() as cursor:
             if args.problem_id:
-                cursor.execute('SELECT id, title, statement_markdown FROM problems WHERE id = %s', (args.problem_id,))
+                cursor.execute('SELECT id, title, statement_markdown, examples_json FROM problems WHERE id = %s', (args.problem_id,))
             else:
-                cursor.execute('SELECT id, title, statement_markdown FROM problems ORDER BY id ASC')
+                cursor.execute('SELECT id, title, statement_markdown, examples_json FROM problems ORDER BY id ASC')
             rows = cursor.fetchall()
 
             for row in rows:
                 original = row['statement_markdown']
                 repaired = service._repair_fragmented_math_markdown(original)
-                if repaired == original:
+                _, examples = service._extract_examples_from_markdown(repaired)
+                examples_json = json.dumps(examples, ensure_ascii=False)
+                if repaired == original and row.get('examples_json') == examples_json:
                     continue
 
                 print(f"[repair] problem #{row['id']} {row['title']}")
                 print('--- repaired preview ---')
                 print(repaired)
                 print('--- end preview ---\n')
+                print('--- extracted examples ---')
+                print(examples_json)
+                print('--- end examples ---\n')
 
                 if args.apply:
                     cursor.execute(
-                        'UPDATE problems SET statement_markdown = %s WHERE id = %s',
-                        (repaired, row['id']),
+                        'UPDATE problems SET statement_markdown = %s, examples_json = %s WHERE id = %s',
+                        (repaired, examples_json, row['id']),
                     )
                 updated += 1
     finally:

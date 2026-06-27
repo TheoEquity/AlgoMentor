@@ -1098,10 +1098,45 @@ class AnalysisService:
         text = re.sub(r'(?<!\$)1\s*\\leq\s*n\s*\\leq\s*\$10\^\{5\}\$(?!\$)', lambda _: '$1 \\leq n \\leq 10^{5}$', text)
         text = re.sub(r'(?<!\$)0\s*\\leq\s*k\s*\\leq\s*\$10\^\{5\}\$(?!\$)', lambda _: '$0 \\leq k \\leq 10^{5}$', text)
         text = re.sub(r'请对\s*\$10\^\{9\}\$\s*\+\s*7\s*取模', '请对 $10^{9} + 7$ 取模', text)
+        text = re.sub(r'变为\s*\n\s*3\s*\n\s*3 的倍数', '变为 3 的倍数', text)
+        text = re.sub(r'\n?\s*∙\s*\n\s*∙?', '\n', text)
+        text = re.sub(
+            r'\$1 \\leq n \\leq 2\\times \$10\^\{5\}\$\$',
+            lambda _: '$1 \\leq n \\leq 2\\times 10^{5}$',
+            text,
+        )
+        text = text.replace('$1 \\leq n \\leq 2\\times $10^{5}$$', '$1 \\leq n \\leq 2\\times 10^{5}$')
+        text = text.replace('2\\times $10^{5}$$', '2\\times 10^{5}$')
+        text = re.sub(
+            r'\[\s*\$l_r\$\s*\]\s*\n*\s*\(\s*\n*\s*1\s*\n*\s*\$\\leq\$\s*\n*\s*l\s*\n*\s*\$\\leq\$\s*\n*\s*r\s*\n*\s*\$\\leq\$\s*\n*\s*n\s*\n*\s*\)\s*\n*\s*\[l,r\]\s*\(1\$\\leq\$l\$\\leq\$r\$\\leq\$n\)，?',
+            lambda _: '$[l, r]$（$1 \\leq l \\leq r \\leq n$），',
+            text,
+        )
+        text = re.sub(
+            r'删除\s*\$s_l\$\s*\+\s*\n*\s*1\s*\n*\s*…\s*\$s_r\$\s*s\s*\n*\s*l\s*\n*\s*,s\s*\n*\s*l\+1\s*\n*\s*,…\s*,s\s*\n*\s*r\s*这一段数位。',
+            lambda _: '删除 $s_l, s_{l+1}, \\dots, s_r$ 这一段数位。',
+            text,
+        )
+        text = re.sub(
+            r'第一行输入一个整数 n\(1 \\leq n \\leq 2\\times \$10\^\{5\}\$\)，表示字符串长度。',
+            lambda _: '第一行输入一个整数 $n$($1 \\leq n \\leq 2\\times 10^{5}$)，表示字符串长度。',
+            text,
+        )
+        text = re.sub(r'第一行输入一个整数 n\((.*?)\)，表示字符串长度。', r'第一行输入一个整数 $n$($\1$)，表示字符串长度。', text)
+        text = re.sub(r'第二行输入一个长度为 \$n\$ 且仅包含数字的字符串 s 。', '第二行输入一个长度为 $n$ 且仅包含数字的字符串 $s$。', text)
+        text = re.sub(r'在一行上输出输出一个整数', '在一行上输出一个整数', text)
+        text = re.sub(r'示例\s*(\d+)\s*输入例子：', r'### 样例 \1\n\n**输入：**\n```', text)
+        text = re.sub(r'1233 输出例子：', '1233\n```\n\n**输出：**\n```', text)
+        text = re.sub(r'7 例子说明：', '7\n```\n\n**说明：**\n', text)
+        text = re.sub(r'^[●•]\s*', '- ', text, flags=re.MULTILINE)
+        text = re.sub(r'"\\tt\s*([^"\n]+)"', r'`\1`', text)
         text = re.sub(r'(\$a_i\$ 满足)\s*\n\s*(\$0 \\leq a_i < 2\^k\$)', r'\1 \2', text)
         text = re.sub(r'(与和。即)\s*\n\s*(\$a_1 \\oplus a_2 \\oplus \\cdots \\oplus a_n \\leq a_1 \\& a_2 \\& \\cdots \\& a_n\$)', r'\1 \2', text)
         text = re.sub(r'(第一行输入两个整数 \$n\$ 和 \$k\$。)\s*\n\s*(\$1 \\leq n \\leq 10\^\{5\}\$)', r'\1\n\n\2', text)
         text = re.sub(r'(\$1 \\leq n \\leq 10\^\{5\}\$)\s*\n\s*(\$0 \\leq k \\leq 10\^\{5\}\$)', r'\1\n\2', text)
+        text = re.sub(r'```\s*\n\s*```', '', text)
+        text = re.sub(r'\n(第一行输入一个整数 \$n\$\([^\n]+\)\，表示字符串长度。)', r'\n\n## 输入格式\n\n\1', text)
+        text = re.sub(r'(在一行上输出一个整数，表示不同的删除方案数。)\s*### 样例', r'\1\n\n## 样例\n\n### 样例', text)
         text = re.sub(r'\n{3,}', '\n\n', text)
         return text.strip()
 
@@ -1173,6 +1208,24 @@ class AnalysisService:
         cleaned = re.sub(r'^\s*\d+[.、]\s*\n(?=\S)', '', cleaned)
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
         return cleaned.strip()
+
+    def _extract_examples_from_markdown(self, markdown: str) -> tuple[str, list[dict[str, str]]]:
+        examples: list[dict[str, str]] = []
+        example_blocks = re.split(r'\n### 样例 \d+\n\n', '\n' + markdown)
+        main_text = example_blocks[0] if example_blocks else markdown
+
+        for block in example_blocks[1:]:
+            inp_match = re.search(r'\*\*输入[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
+            out_match = re.search(r'\*\*输出[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
+            expl_match = re.search(r'\*\*说明[：:]\*\*\s*\n(.*?)(?=\n###|\Z)', block, re.DOTALL)
+            if inp_match and out_match:
+                examples.append({
+                    'input': inp_match.group(1).strip(),
+                    'output': out_match.group(1).strip(),
+                    'explanation': expl_match.group(1).strip() if expl_match else '',
+                })
+
+        return main_text.strip(), examples
 
     def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
         import re
@@ -1253,20 +1306,7 @@ class AnalysisService:
         else:
             markdown = f'## 题目描述\n\n{description}' if description else clean.strip()
 
-        examples: list[dict] = []
-        example_blocks = re.split(r'\n### 样例 \d+\n\n', '\n' + markdown)
-        main_text = example_blocks[0] if example_blocks else markdown
-
-        for block in example_blocks[1:]:
-            inp_match = re.search(r'\*\*输入[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
-            out_match = re.search(r'\*\*输出[：:]\*\*\s*\n```\s*\n(.*?)```', block, re.DOTALL)
-            expl_match = re.search(r'\*\*说明[：:]\*\*\s*\n(.*?)(?=\n###|\Z)', block, re.DOTALL)
-            if inp_match and out_match:
-                examples.append({
-                    'input': inp_match.group(1).strip(),
-                    'output': out_match.group(1).strip(),
-                    'explanation': expl_match.group(1).strip() if expl_match else '',
-                })
+        main_text, examples = self._extract_examples_from_markdown(markdown)
 
         source_ref = ''
         ref_match = re.search(r'@(\S+)\s*整理上传', text)
