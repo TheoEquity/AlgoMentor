@@ -24,6 +24,7 @@ class ProblemBase(BaseModel):
     slug: str = Field(min_length=3)
     title: str = Field(min_length=2)
     company: str = Field(min_length=2)
+    position: str = Field(default='')
     difficulty: Literal['Easy', 'Medium', 'Hard']
     category_slug: str = Field(default='')
     statement_markdown: str = Field(min_length=10)
@@ -47,11 +48,51 @@ class ProblemCreate(ProblemBase):
     test_cases: list[ProblemTestCase] = Field(min_length=1)
 
 
+class ImportedProblemSample(BaseModel):
+    input: str = ''
+    output: str = ''
+    explanation: str = ''
+
+
+class ProblemImportRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source: str = 'niuke'
+    title: str = ''
+    description_html: str = ''
+    description_text: str = ''
+    source_url: str = ''
+    samples: list[ImportedProblemSample] = Field(default_factory=list)
+
+
+class ProblemBatchImportRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    problems: list[ProblemImportRequest] = Field(min_length=1)  # pyright: ignore[reportCallIssue]
+
+
+class OfflineProblemExtractRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    file_name: str = ''
+    file_content: str = Field(min_length=1)
+    source_url: str = ''
+
+
+class OfflineProblemCandidate(BaseModel):
+    title: str
+    description_html: str = ''
+    description_text: str = ''
+    source_url: str = ''
+    samples: list[ImportedProblemSample] = Field(default_factory=list)
+
+
 class ProblemListItem(BaseModel):
     id: int
     slug: str
     title: str
     company: str
+    position: str = ''
     difficulty: str
     category_slug: str
     tags: list[str]
@@ -63,6 +104,13 @@ class ProblemListItem(BaseModel):
     time_limit_ms: int = 2000
     memory_limit_kb: int = 262144
     updated_at: str
+
+
+class PaginatedProblemsResponse(BaseModel):
+    items: list[ProblemListItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class ProblemDetail(ProblemListItem):

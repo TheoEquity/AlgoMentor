@@ -19,34 +19,50 @@ class ProblemRepository:
         difficulty: str | None,
         category_slug: str | None,
         tag: str | None,
-    ) -> list[ProblemListItem]:
-        query = '''
-            SELECT * FROM problems
-            WHERE (%s IS NULL OR company = %s)
-              AND (%s IS NULL OR difficulty = %s)
-              AND (%s IS NULL OR category_slug = %s)
-              AND (%s IS NULL OR tags_json LIKE %s OR tags_json LIKE %s)
-            ORDER BY updated_at DESC, id DESC
-        '''
+        search: str | None = None,
+        position: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[ProblemListItem], int]:
+        conditions = [
+            '(%s IS NULL OR company = %s)',
+            '(%s IS NULL OR difficulty = %s)',
+            '(%s IS NULL OR category_slug = %s)',
+            '(%s IS NULL OR tags_json LIKE %s OR tags_json LIKE %s)',
+            '(%s IS NULL OR position = %s)',
+            '(%s IS NULL OR title ILIKE %s OR company ILIKE %s)',
+        ]
+        base_conditions = 'WHERE ' + ' AND '.join(conditions)
         tag_like = f'%{tag}%' if tag else None
         escaped_tag = json.dumps(tag).replace('\\', '\\\\') if tag else None
         tag_json_like = f'%{escaped_tag}%' if escaped_tag else None
+        search_like = f'%{search}%' if search else None
+        params = (
+            company, company,
+            difficulty, difficulty,
+            category_slug, category_slug,
+            tag, tag_like, tag_json_like,
+            position, position,
+            search, search_like, search_like,
+        )
 
         connection = get_connection(self.database_url)
         with connection, connection.cursor() as cursor:
             cursor.execute(
-                query,
-                (
-                    company, company,
-                    difficulty, difficulty,
-                    category_slug, category_slug,
-                    tag, tag_like, tag_json_like,
-                ),
+                'SELECT COUNT(*) FROM problems ' + base_conditions,
+                params,
+            )
+            total = cursor.fetchone()['count']
+
+            offset = (page - 1) * page_size
+            cursor.execute(
+                'SELECT * FROM problems ' + base_conditions + ' ORDER BY updated_at DESC, id DESC LIMIT %s OFFSET %s',
+                params + (page_size, offset),
             )
             rows = cursor.fetchall()
         connection.close()
 
-        return [self._list_item_from_row(row) for row in rows]
+        return [self._list_item_from_row(row) for row in rows], total
 
     def get_problem(self, problem_id: int) -> ProblemDetail | None:
         connection = get_connection(self.database_url)
@@ -76,18 +92,19 @@ class ProblemRepository:
             cursor.execute(
                 '''
                 INSERT INTO problems (
-                    slug, title, company, difficulty, category_slug,
+                    slug, title, company, position, difficulty, category_slug,
                     statement_markdown, constraints_text, tags_json,
                     examples_json, supported_languages_json, starter_templates_json,
                     source_type, source, frequency, year, source_ref, external_id,
                     status, time_limit_ms, memory_limit_kb, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 ''',
                 (
                     slug,
                     payload.title,
                     payload.company,
+                    payload.position,
                     payload.difficulty,
                     payload.category_slug,
                     payload.statement_markdown,
@@ -151,6 +168,7 @@ class ProblemRepository:
                     SET slug = %s,
                         title = %s,
                         company = %s,
+                        position = %s,
                         difficulty = %s,
                         category_slug = %s,
                         statement_markdown = %s,
@@ -175,6 +193,7 @@ class ProblemRepository:
                         payload.slug,
                         payload.title,
                         payload.company,
+                        payload.position,
                         payload.difficulty,
                         payload.category_slug,
                         payload.statement_markdown,
@@ -240,7 +259,8 @@ class ProblemRepository:
             id=row['id'],
             slug=row['slug'],
             title=row['title'],
-            company=row['company'],
+            company=row['company'] or '',
+            position=row.get('position', ''),
             difficulty=row['difficulty'],
             category_slug=row['category_slug'],
             tags=json.loads(row['tags_json']),
@@ -275,7 +295,8 @@ class ProblemRepository:
             id=row['id'],
             slug=row['slug'],
             title=row['title'],
-            company=row['company'],
+            company=row['company'] or '',
+            position=row.get('position', ''),
             difficulty=row['difficulty'],
             category_slug=row['category_slug'],
             statement_markdown=row['statement_markdown'],

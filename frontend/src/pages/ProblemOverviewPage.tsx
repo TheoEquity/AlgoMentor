@@ -22,6 +22,7 @@ type ProblemEditForm = {
   slug: string
   title: string
   company: string
+  position: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
   category_slug: string
   statement_markdown: string
@@ -48,6 +49,7 @@ function buildEditForm(problem: ProblemDetail): ProblemEditForm {
     slug: problem.slug,
     title: problem.title,
     company: problem.company,
+    position: problem.position || '',
     difficulty: problem.difficulty as 'Easy' | 'Medium' | 'Hard',
     category_slug: problem.category_slug,
     statement_markdown: problem.statement_markdown,
@@ -128,6 +130,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       slug: form.slug.trim(),
       title: form.title.trim(),
       company: form.company.trim(),
+      position: form.position.trim(),
       difficulty: form.difficulty,
       category_slug: form.category_slug.trim(),
       statement_markdown: form.statement_markdown.trim(),
@@ -260,6 +263,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
               </select>
             </label>
             <label className="settings-field">
+              <span>年度</span>
+              <input value={form.year} onChange={(event) => handleFieldChange('year', event.target.value)} />
+            </label>
+            <label className="settings-field">
               <span>公司</span>
               <select value={form.company} onChange={(event) => handleFieldChange('company', event.target.value)}>
                 {form.company && companies.every((item) => item.abbreviation !== form.company) ? <option value={form.company}>{form.company}</option> : null}
@@ -269,6 +276,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="settings-field">
+              <span>岗位</span>
+              <input value={form.position} onChange={(event) => handleFieldChange('position', event.target.value)} placeholder="后端/前端/算法..." />
             </label>
             <label className="settings-field">
               <span>难度</span>
@@ -287,8 +298,13 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
               </select>
             </label>
             <label className="settings-field">
-              <span>年度</span>
-              <input value={form.year} onChange={(event) => handleFieldChange('year', event.target.value)} />
+              <span>最新状态</span>
+              <select value={form.status} onChange={(event) => handleFieldChange('status', event.target.value)}>
+                <option value="未开始">未开始</option>
+                <option value="已通过">已通过</option>
+                <option value="待复盘">待复盘</option>
+                <option value="待修正">待修正</option>
+              </select>
             </label>
             <label className="settings-field">
               <span>来源</span>
@@ -297,15 +313,6 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
                 <option value="Leetcode">Leetcode</option>
                 <option value="手工">手工</option>
                 <option value="AI派生">AI派生</option>
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>最新状态</span>
-              <select value={form.status} onChange={(event) => handleFieldChange('status', event.target.value)}>
-                <option value="未开始">未开始</option>
-                <option value="已通过">已通过</option>
-                <option value="待复盘">待复盘</option>
-                <option value="待修正">待修正</option>
               </select>
             </label>
             <label className="settings-field">

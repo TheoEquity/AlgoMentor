@@ -378,8 +378,6 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
           ) : null}
         </div>
       ) : null}
-
-      <div className="backend-note">当前页面使用 <code>/api/v1/review</code> 聚合真实提交记录，并支持错题、公司、标签和错误类型筛选。</div>
     </section>
   )
 }

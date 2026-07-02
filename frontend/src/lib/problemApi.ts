@@ -1,12 +1,31 @@
-import type { ProblemCreatePayload, ProblemDetail, ProblemListItem } from '../types/problem'
+import type { OfflineProblemCandidate, OfflineProblemExtractPayload, PaginatedProblemsResponse, ProblemBatchImportPayload, ProblemCreatePayload, ProblemDetail, ProblemImportPayload, ProblemListItem } from '../types/problem'
 import { fallbackProblemDetails, fallbackProblemList } from './problemFallbacks'
 import { requestJSON } from './http'
 
-export async function listProblems(): Promise<ProblemListItem[]> {
+export interface ProblemListFilters {
+  page?: number
+  pageSize?: number
+  company?: string
+  difficulty?: string
+  categorySlug?: string
+  search?: string
+  position?: string
+}
+
+export async function listProblems(filters: ProblemListFilters = {}): Promise<PaginatedProblemsResponse> {
+  const params = new URLSearchParams()
+  if (filters.page != null) params.set('page', String(filters.page))
+  if (filters.pageSize != null) params.set('page_size', String(filters.pageSize))
+  if (filters.company) params.set('company', filters.company)
+  if (filters.difficulty) params.set('difficulty', filters.difficulty)
+  if (filters.categorySlug) params.set('category_slug', filters.categorySlug)
+  if (filters.search) params.set('search', filters.search)
+  if (filters.position) params.set('position', filters.position)
+  const queryString = params.toString()
   try {
-    return await requestJSON<ProblemListItem[]>('/problems')
+    return await requestJSON<PaginatedProblemsResponse>(`/problems${queryString ? `?${queryString}` : ''}`)
   } catch {
-    return fallbackProblemList
+    return { items: fallbackProblemList, total: fallbackProblemList.length, page: 1, page_size: 50 }
   }
 }
 
@@ -25,6 +44,27 @@ export async function getProblem(problemId: number): Promise<ProblemDetail> {
 
 export async function createProblem(payload: ProblemCreatePayload): Promise<ProblemDetail> {
   return requestJSON<ProblemDetail>('/problems', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function importProblem(payload: ProblemImportPayload): Promise<ProblemDetail> {
+  return requestJSON<ProblemDetail>('/problems/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function extractOfflineProblems(payload: OfflineProblemExtractPayload): Promise<OfflineProblemCandidate[]> {
+  return requestJSON<OfflineProblemCandidate[]>('/problems/import-offline/extract', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function batchImportProblems(payload: ProblemBatchImportPayload): Promise<ProblemDetail[]> {
+  return requestJSON<ProblemDetail[]>('/problems/import/batch', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

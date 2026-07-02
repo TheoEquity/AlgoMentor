@@ -9,6 +9,7 @@ const defaultForm: LLMSettingsPayload = {
   provider: 'OpenAI Compatible',
   endpoint_url: 'https://api.openai.com/v1',
   solution_model: 'gpt-4.1-mini',
+  vision_model: 'gpt-4.1-mini',
   attribution_model: 'gpt-4.1-mini',
   review_model: 'gpt-4.1-mini',
   solution_temperature: 0.2,
@@ -83,6 +84,7 @@ function LLMConfigTab() {
         provider: settings.provider,
         endpoint_url: settings.endpoint_url,
         solution_model: settings.solution_model,
+        vision_model: settings.vision_model,
         attribution_model: settings.attribution_model,
         review_model: settings.review_model,
         solution_temperature: settings.solution_temperature,
@@ -259,6 +261,20 @@ function LLMConfigTab() {
             </label>
 
             <label className="settings-field">
+              <span>图片识别模型</span>
+              <input
+                type="text"
+                value={form.vision_model}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    vision_model: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="settings-field">
               <span>错误归因模型</span>
               <input
                 type="text"
@@ -272,7 +288,7 @@ function LLMConfigTab() {
               />
             </label>
 
-            <label className="settings-field settings-field-full">
+            <label className="settings-field">
               <span>复盘推荐模型</span>
               <input
                 type="text"
@@ -453,31 +469,31 @@ function CompanyConfigTab() {
         <div className="empty-panel" style={{ marginTop: 16 }}>正在加载公司配置...</div>
       ) : (
         <div className="detail-card" style={{ marginTop: 16 }}>
-          <table className="data-table">
+          <table className="data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th>#</th>
-                <th>公司名称</th>
-                <th>英文名</th>
-                <th>简称</th>
-                <th>操作</th>
+                <th style={{ width: '8%', border: '1px solid var(--border-subtle)', padding: '8px 12px', textAlign: 'left' }}>#</th>
+                <th style={{ width: '28%', border: '1px solid var(--border-subtle)', padding: '8px 12px', textAlign: 'left' }}>公司名称</th>
+                <th style={{ width: '28%', border: '1px solid var(--border-subtle)', padding: '8px 12px', textAlign: 'left' }}>英文名</th>
+                <th style={{ width: '16%', border: '1px solid var(--border-subtle)', padding: '8px 12px', textAlign: 'left' }}>简称</th>
+                <th style={{ width: '20%', border: '1px solid var(--border-subtle)', padding: '8px 12px', textAlign: 'left' }}>操作</th>
               </tr>
             </thead>
             <tbody>
               {companies.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#6b7280' }}>
-                    暂无公司记录，请在上方添加。
-                  </td>
-                </tr>
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#6b7280', border: '1px solid var(--border-subtle)' }}>
+                      暂无公司记录，请在上方添加。
+                    </td>
+                  </tr>
               ) : (
                 companies.map((company) => (
                   <tr key={company.id}>
-                    <td>{company.id}</td>
-                    <td>{company.name}</td>
-                    <td>{company.name_en || '-'}</td>
-                    <td>{company.abbreviation || '-'}</td>
-                    <td>
+                    <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }}>{company.id}</td>
+                    <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }}>{company.name}</td>
+                    <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }}>{company.name_en || '-'}</td>
+                    <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }}>{company.abbreviation || '-'}</td>
+                    <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }}>
                       <button
                         type="button"
                         className="button ghost"

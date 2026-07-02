@@ -5,6 +5,7 @@ export type LLMSettings = {
   provider: LLMProvider
   endpoint_url: string
   solution_model: string
+  vision_model: string
   attribution_model: string
   review_model: string
   solution_temperature: number

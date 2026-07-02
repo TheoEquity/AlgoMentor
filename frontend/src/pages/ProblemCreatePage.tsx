@@ -1,16 +1,18 @@
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { parseProblemText } from '../lib/analysisApi'
-import { createProblem } from '../lib/problemApi'
+import { createProblem, extractOfflineProblems, batchImportProblems } from '../lib/problemApi'
 import { listCompanies } from '../lib/companyApi'
 import { listCategories } from '../lib/categoryApi'
 import type { Company } from '../types/company'
 import type { ProblemCategory } from '../types/problemCategory'
 import type { ParseProblemPayload, ParsedProblemResult } from '../types/analysis'
-import type { ProblemCreatePayload, ProblemLatestStatus } from '../types/problem'
+import type { OfflineProblemCandidate, ProblemCreatePayload, ProblemImportPayload, ProblemBatchImportPayload, ProblemLatestStatus } from '../types/problem'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
 
-type CreateTab = 'paste' | 'pdf' | 'image'
+type CreateTab = 'paste' | 'image' | 'niuke'
+
+type OfflineCandidateWithFile = OfflineProblemCandidate & { _fileName: string }
 
 type Props = {
   onBack: () => void
@@ -20,6 +22,7 @@ type Props = {
 type EditableForm = {
   title: string
   company: string
+  position: string
   difficulty: string
   category_slug: string
   statement_markdown: string
@@ -33,10 +36,12 @@ type EditableForm = {
   external_id: string
 }
 
+
 function buildForm(parsed: ParsedProblemResult, rawText: string): EditableForm {
   return {
     title: parsed.title || '',
     company: parsed.company || '',
+    position: '',
     difficulty: parsed.difficulty || 'Medium',
     category_slug: parsed.category_slug || '',
     statement_markdown: parsed.statement_markdown || rawText.trim(),
@@ -66,6 +71,21 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('文件读取失败'))
+    }
+    reader.onerror = () => reject(new Error('文件读取失败'))
+    reader.readAsText(file)
+  })
+}
+
 export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
   const [activeTab, setActiveTab] = useState<CreateTab>('paste')
   const [rawText, setRawText] = useState('')
@@ -81,6 +101,15 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
   const [createError, setCreateError] = useState('')
   const [companies, setCompanies] = useState<Company[]>([])
   const [categories, setCategories] = useState<ProblemCategory[]>([])
+  const [niukeFileName, setNiukeFileName] = useState('')
+  const [offlineCandidates, setOfflineCandidates] = useState<OfflineCandidateWithFile[]>([])
+  const [offlineError, setOfflineError] = useState('')
+  const [offlineSuccess, setOfflineSuccess] = useState('')
+  const [isOfflineExtracting, setIsOfflineExtracting] = useState(false)
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
+  const [isBulkImporting, setIsBulkImporting] = useState(false)
+  const [importedIndices, setImportedIndices] = useState<Set<number>>(new Set())
+  const [importErrorMap, setImportErrorMap] = useState<Map<number, string>>(new Map())
 
   useEffect(() => {
     void listCompanies().then(setCompanies).catch(() => {})
@@ -222,6 +251,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
         slug: (parsed?.slug && parsed.slug.length >= 3 ? parsed.slug : form.title.replace(/\W+/g, '-').replace(/^-|-$/g, '')) || 'untitled-problem',
         title: form.title || '未命名题目',
         company: form.company || '未知',
+        position: form.position || '',
         difficulty: (['Easy', 'Medium', 'Hard'] as const).includes(form.difficulty as 'Easy' | 'Medium' | 'Hard') ? form.difficulty as 'Easy' | 'Medium' | 'Hard' : 'Medium',
         category_slug: form.category_slug || 'simulation',
         statement_markdown: form.statement_markdown.length >= 10 ? form.statement_markdown : form.statement_markdown.padEnd(10, ' '),
@@ -254,6 +284,122 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
     }
   }
 
+  const handleOfflineFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    setIsOfflineExtracting(true)
+    setOfflineError('')
+    setOfflineSuccess('')
+    setOfflineCandidates([])
+    setSelectedIndices(new Set())
+    setImportedIndices(new Set())
+    setImportErrorMap(new Map())
+    setNiukeFileName(files.map((f) => f.name).join(', '))
+
+    const allCandidates: OfflineCandidateWithFile[] = []
+    const errors: string[] = []
+
+    for (const file of files) {
+      try {
+        const fileContent = await readFileAsText(file)
+        const candidates = await extractOfflineProblems({
+          file_name: file.name,
+          file_content: fileContent,
+        })
+        for (const c of candidates) {
+          allCandidates.push({ ...c, _fileName: file.name })
+        }
+      } catch (error) {
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : '解析失败'}`)
+      }
+    }
+
+    setOfflineCandidates(allCandidates)
+    if (errors.length > 0) {
+      setOfflineError(errors.join('\n'))
+    }
+    setOfflineSuccess(files.length > 1
+      ? `共 ${files.length} 个文件，识别 ${allCandidates.length} 道编程题`
+      : `已识别 ${allCandidates.length} 道编程题`)
+    setIsOfflineExtracting(false)
+    event.target.value = ''
+  }
+
+  const handleToggleCandidate = (index: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedIndices.size === offlineCandidates.length) {
+      setSelectedIndices(new Set())
+    } else {
+      setSelectedIndices(new Set(offlineCandidates.map((_, i) => i)))
+    }
+  }
+
+  const handleBatchImport = async () => {
+    if (selectedIndices.size === 0) {
+      return
+    }
+    setIsBulkImporting(true)
+    setOfflineError('')
+    setOfflineSuccess('')
+
+    const problems: ProblemImportPayload[] = []
+    const indices: number[] = []
+    for (const idx of selectedIndices) {
+      const c = offlineCandidates[idx]
+      if (c) {
+        problems.push({
+          source: 'niuke_offline',
+          title: c.title,
+          description_html: c.description_html,
+          description_text: c.description_text,
+          source_url: c.source_url,
+          samples: c.samples,
+        })
+        indices.push(idx)
+      }
+    }
+
+    const newErrorMap = new Map<number, string>()
+    const newImported = new Set(importedIndices)
+
+    try {
+      const payload: ProblemBatchImportPayload = { problems }
+      const results = await batchImportProblems(payload)
+      for (let i = 0; i < results.length; i++) {
+        const idx = indices[i]
+        if (idx !== undefined && results[i]) {
+          newImported.add(idx)
+        }
+      }
+      setImportedIndices(new Set(newImported))
+      setOfflineSuccess(`成功导入 ${results.length} 道题`)
+      setSelectedIndices(new Set())
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '批量导入失败'
+      setOfflineError(msg)
+      for (const idx of indices) {
+        newErrorMap.set(idx, msg)
+      }
+    } finally {
+      setImportErrorMap(new Map(newErrorMap))
+      setIsBulkImporting(false)
+    }
+  }
+
   const canAiParse = activeTab === 'paste'
     ? Boolean(rawText.trim() || parseImageDataUrl)
     : activeTab === 'image'
@@ -278,14 +424,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
           className={`workspace-tab${activeTab === 'paste' ? ' active' : ''}`}
           onClick={() => setActiveTab('paste')}
         >
-          手工粘贴
-        </button>
-        <button
-          type="button"
-          className={`workspace-tab${activeTab === 'pdf' ? ' active' : ''}`}
-          onClick={() => setActiveTab('pdf')}
-        >
-          PDF 导入
+           手工粘贴
         </button>
         <button
           type="button"
@@ -293,6 +432,13 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
           onClick={() => setActiveTab('image')}
         >
           图像识别
+        </button>
+        <button
+          type="button"
+          className={`workspace-tab${activeTab === 'niuke' ? ' active' : ''}`}
+          onClick={() => setActiveTab('niuke')}
+        >
+          牛客导入
         </button>
       </div>
 
@@ -339,13 +485,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>
         </div>
-      ) : activeTab === 'pdf' ? (
-        <div className="detail-card">
-          <div className="empty-panel">
-            PDF 导入功能即将上线。后续会接入文档解析后直接进入同一套结构化导题流程。
-          </div>
-        </div>
-      ) : (
+      ) : activeTab === 'image' ? (
         <div className="detail-card">
           <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
             <span>题面图片</span>
@@ -372,6 +512,81 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
             </button>
             {imageError ? <span className="save-error-text">{imageError}</span> : null}
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
+          </div>
+        </div>
+      ) : (
+        <div className="detail-card">
+          <div className="detail-card" style={{ marginTop: 'var(--space-4)' }}>
+            <h2>离线 html / mhtml 导入</h2>
+            <p className="backend-note" style={{ marginBottom: 'var(--space-3)' }}>
+              支持直接读取牛客导出的一个或多个 <code>.html</code> / <code>.mhtml</code> 文件，优先抽取整卷中的编程题，再按题逐个导入。
+            </p>
+            <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
+              <span>离线文件</span>
+              <input type="file" multiple accept=".html,.mhtml,text/html,message/rfc822,multipart/related" onChange={(event) => void handleOfflineFileChange(event)} />
+            </label>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+              {niukeFileName ? <span>{niukeFileName}</span> : null}
+              {isOfflineExtracting ? <span className="save-success-text">离线题面解析中...</span> : null}
+              {offlineSuccess ? <span className="save-success-text">{offlineSuccess}</span> : null}
+              {offlineError ? <span className="save-error-text">{offlineError}</span> : null}
+            </div>
+
+            {offlineCandidates.length > 0 ? (
+              <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label className="backend-note" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIndices.size === offlineCandidates.length && offlineCandidates.length > 0}
+                      onChange={handleSelectAll}
+                      disabled={isBulkImporting}
+                    />
+                    全选
+                  </label>
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={selectedIndices.size === 0 || isBulkImporting}
+                    onClick={() => void handleBatchImport()}
+                  >
+                    {isBulkImporting ? '批量导入中...' : `批量导入 ${selectedIndices.size} 题`}
+                  </button>
+                </div>
+                {offlineCandidates.map((candidate, index) => {
+                  const isImported = importedIndices.has(index)
+                  const errorMsg = importErrorMap.get(index)
+                  const isSelected = selectedIndices.has(index)
+                  return (
+                    <article key={`${candidate.title}-${candidate.source_url}`} className="detail-card">
+                      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+                        <input
+                          type="checkbox"
+                          style={{ marginTop: 'var(--space-1)' }}
+                          checked={isSelected || isImported}
+                          disabled={isImported || isBulkImporting}
+                          onChange={() => handleToggleCandidate(index)}
+                        />
+                        <div>
+                          <h3 style={{ marginBottom: 'var(--space-2)' }}>
+                            {candidate.title}
+                            {isImported ? <span className="save-success-text" style={{ marginLeft: 'var(--space-2)' }}>已导入</span> : null}
+                            {errorMsg ? <span className="save-error-text" style={{ marginLeft: 'var(--space-2)' }}>{errorMsg}</span> : null}
+                          </h3>
+                          <div className="backend-note">样例数：{candidate.samples.length}{candidate._fileName ? `   文件：${candidate._fileName}` : ''}</div>
+                          {candidate.source_url ? <div className="backend-note">来源：{candidate.source_url}</div> : null}
+                        </div>
+                      </div>
+                      {candidate.description_text ? (
+                        <pre className="backend-note" style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--space-3)', maxHeight: 220, overflow: 'auto' }}>
+                          {candidate.description_text.slice(0, 1200)}
+                        </pre>
+                      ) : null}
+                    </article>
+                  )
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -424,6 +639,10 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                   </select>
                 </label>
                 <label className="settings-field">
+                  <span>年度</span>
+                  <input value={form.year} onChange={(event) => updateForm('year', event.target.value)} />
+                </label>
+                <label className="settings-field">
                   <span>公司</span>
                   <select value={form.company} onChange={(event) => updateForm('company', event.target.value)}>
                     {form.company && companies.every((item) => item.abbreviation !== form.company) ? (
@@ -433,6 +652,10 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                       <option key={item.id} value={item.abbreviation}>{item.abbreviation}</option>
                     ))}
                   </select>
+                </label>
+                <label className="settings-field">
+                  <span>岗位</span>
+                  <input value={form.position} onChange={(event) => updateForm('position', event.target.value)} placeholder="后端/前端/算法..." />
                 </label>
                 <label className="settings-field">
                   <span>难度</span>
@@ -451,8 +674,10 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                   </select>
                 </label>
                 <label className="settings-field">
-                  <span>年度</span>
-                  <input value={form.year} onChange={(event) => updateForm('year', event.target.value)} />
+                  <span>最新状态</span>
+                  <select value="未开始" disabled>
+                    <option value="未开始">未开始</option>
+                  </select>
                 </label>
                 <label className="settings-field">
                   <span>来源</span>
@@ -461,12 +686,6 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                     <option value="Leetcode">Leetcode</option>
                     <option value="手工">手工</option>
                     <option value="AI派生">AI派生</option>
-                  </select>
-                </label>
-                <label className="settings-field">
-                  <span>最新状态</span>
-                  <select value="未开始" disabled>
-                    <option value="未开始">未开始</option>
                   </select>
                 </label>
                 <label className="settings-field">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { createProblem, deleteProblem, listProblems } from '../lib/problemApi'
 import { listCategories } from '../lib/categoryApi'
@@ -14,12 +14,17 @@ type ProblemLibraryPageProps = {
 
 export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLibraryPageProps) {
   const [problems, setProblems] = useState<ProblemListItem[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isLoading, setIsLoading] = useState(false)
+  const pageSize = 15
   const [companies, setCompanies] = useState<Company[]>([])
   const [categories, setCategories] = useState<ProblemCategory[]>([])
   const [searchText, setSearchText] = useState('')
   const [company, setCompany] = useState('all')
   const [categorySlug, setCategorySlug] = useState('all')
   const [difficulty, setDifficulty] = useState('all')
+  const [positionFilter, setPositionFilter] = useState('all')
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [createError, setCreateError] = useState('')
   const [createSuccess, setCreateSuccess] = useState('')
@@ -47,13 +52,62 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     java_template: 'public class Main {\n    public static void main(String[] args) throws Exception {\n    }\n}\n',
   })
 
+  const prevFiltersRef = useRef({ searchText, company, categorySlug, difficulty, positionFilter })
+
   useEffect(() => {
     void Promise.all([
-      listProblems().then(setProblems),
       listCompanies().then(setCompanies).catch(() => {}),
       listCategories().then(setCategories).catch(() => {}),
     ])
   }, [])
+
+  useEffect(() => {
+    const prev = prevFiltersRef.current
+
+    if (
+      prev.searchText !== searchText ||
+      prev.company !== company ||
+      prev.categorySlug !== categorySlug ||
+      prev.difficulty !== difficulty ||
+      prev.positionFilter !== positionFilter
+    ) {
+      setCurrentPage(1)
+      prevFiltersRef.current = { searchText, company, categorySlug, difficulty, positionFilter }
+    }
+  }, [searchText, company, categorySlug, difficulty, positionFilter])
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    listProblems({
+      page: currentPage,
+      pageSize,
+      search: searchText || undefined,
+      company: company !== 'all' ? company : undefined,
+      categorySlug: categorySlug !== 'all' ? categorySlug : undefined,
+      difficulty: difficulty !== 'all' ? difficulty : undefined,
+      position: positionFilter !== 'all' ? positionFilter : undefined,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setProblems(result.items)
+          setTotalCount(result.total)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [currentPage, searchText, company, categorySlug, difficulty, positionFilter])
+
+  const positionNames = useMemo(() => {
+    return Array.from(new Set(problems.map((p) => p.position).filter(Boolean)))
+  }, [problems])
+
+  const companyNames = useMemo(() => {
+    return Array.from(new Set(problems.map((p) => p.company)))
+  }, [problems])
 
   const handleCreateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({
@@ -154,22 +208,6 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     }
   }
 
-  const filteredProblems = useMemo(() => {
-    return problems.filter((problem) => {
-      const matchesSearch =
-        searchText.length === 0 ||
-        problem.title.includes(searchText) ||
-        problem.company.includes(searchText)
-
-      const matchesCompany = company === 'all' || problem.company === company
-      const matchesCategory = categorySlug === 'all' || problem.category_slug === categorySlug
-      const matchesDifficulty = difficulty === 'all' || problem.difficulty === difficulty
-
-      return matchesSearch && matchesCompany && matchesCategory && matchesDifficulty
-    })
-  }, [company, categorySlug, difficulty, problems, searchText])
-
-  const companyNames = Array.from(new Set(problems.map((problem) => problem.company)))
   const categoryNames: { slug: string; name: string }[] = categories.map((c) => ({ slug: c.slug, name: c.name }))
   const categoryNameBySlug = new Map(categoryNames.map((category) => [category.slug, category.name]))
 
@@ -178,13 +216,11 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       <div className="page-header">
         <div>
           <h1>题库</h1>
-          <p>顶部筛选加传统表格布局，作为 ByteHunter 前端骨架的首个页面。</p>
         </div>
 
         <div className="summary-strip" aria-label="题库摘要">
-          <span className="summary-pill">{companies.length} 家公司</span>
-          <span className="summary-pill">{problems.length} 道首批题</span>
-          <span className="summary-pill">{filteredProblems.length} 条当前结果</span>
+          <span className="summary-pill">{totalCount} 道题</span>
+          <span className="summary-pill">{currentPage} / {Math.ceil(totalCount / pageSize)} 页</span>
         </div>
       </div>
 
@@ -229,6 +265,19 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
               <option value="Hard">Hard</option>
             </select>
           </label>
+
+          {positionNames.length > 0 ? (
+            <label className="filter-control">
+              <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
+                <option value="all">全部岗位</option>
+                {positionNames.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         <div className="toolbar-row">
@@ -259,6 +308,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                 setCompany('all')
                 setCategorySlug('all')
                 setDifficulty('all')
+                setPositionFilter('all')
               }}
             >
               重置
@@ -419,17 +469,18 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
               <tr>
                 <th>题目</th>
                 <th>题型</th>
+                <th>年度</th>
                 <th>公司</th>
+                <th>岗位</th>
                 <th>难度</th>
                 <th>频率</th>
-                <th>年度</th>
-                <th>来源</th>
                 <th>最新状态</th>
+                <th>来源</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProblems.map((problem) => (
+              {problems.map((problem) => (
                 <tr key={problem.id}>
                   <td>
                     <div className="problem-title">
@@ -442,16 +493,17 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                     </div>
                   </td>
                   <td>{categoryNameBySlug.get(problem.category_slug) || problem.category_slug || '-'}</td>
+                  <td>{problem.year || '-'}</td>
                   <td>{problem.company}</td>
+                  <td>{problem.position || '-'}</td>
                   <td>{problem.difficulty}</td>
                   <td>{problem.frequency}</td>
-                  <td>{problem.year || '-'}</td>
-                  <td>{problem.source}</td>
                   <td>
                     <span className={`status-badge ${problem.status === '已通过' ? 'ac' : problem.status === '待修正' ? 'wa' : 'review'}`}>
                       {problem.status}
                     </span>
                   </td>
+                  <td>{problem.source}</td>
                   <td>
                     <div className="table-actions">
                       <button type="button" className="link-button" onClick={() => onOpenProblem(problem.id)}>
@@ -471,19 +523,32 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
         </div>
 
         <div className="table-footer">
-          <span>显示 1 - {filteredProblems.length} / {problems.length} 道题</span>
+          <span>
+            {totalCount > 0
+              ? `显示 ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, totalCount)} / ${totalCount} 道题`
+              : '暂无题目'}
+            {isLoading ? ' (加载中...)' : ''}
+          </span>
           <div className="table-footer-actions">
-            <button type="button" className="button ghost">
+            <button
+              type="button"
+              className="button ghost"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
               上一页
             </button>
-            <button type="button" className="button">
+            <button
+              type="button"
+              className="button"
+              disabled={currentPage * pageSize >= totalCount}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
               下一页
             </button>
           </div>
         </div>
       </div>
-
-      <div className="backend-note">当前页面优先请求 <code>/api/v1/problems</code>，接口不可用时回退到本地种子数据。</div>
     </section>
   )
 }

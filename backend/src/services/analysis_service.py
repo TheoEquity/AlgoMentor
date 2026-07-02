@@ -752,6 +752,8 @@ class AnalysisService:
         rule_result = self._parse_rule_based(text) if has_text else None
         if rule_result and self._needs_formula_enrichment(text):
             rule_result = self._enrich_formulas(rule_result)
+        if rule_result is not None:
+            rule_result = self._postprocess_parsed_problem(rule_result, source_text=text)
 
         if mode == 'text_only' and rule_result:
             rule_result.company = self._normalize_company_abbreviation(rule_result.company)
@@ -766,28 +768,189 @@ class AnalysisService:
                     rule_result.company = self._normalize_company_abbreviation(rule_result.company)
                 return rule_result or self._fallback_parse(settings, text)
             result = self._merge_parse_results(rule_result, self._build_parse_result(settings, payload), text)
+            result = self._postprocess_parsed_problem(result, source_text=text)
             result.company = self._normalize_company_abbreviation(result.company)
             return result
 
         prompt = self._build_multimodal_parse_prompt(text, mode, image_name)
         try:
-            payload = self.client.generate_json_with_image(
-                settings,
-                api_key,
-                settings.solution_model,
-                prompt,
-                settings.solution_temperature,
-                image_data_url,
+                payload = self.client.generate_json_with_image(
+                    settings,
+                    api_key,
+                    settings.vision_model,
+                    prompt,
+                    settings.solution_temperature,
+                    image_data_url,
             )
-        except LLMClientError:
+        except LLMClientError as exc:
             if rule_result is not None:
                 rule_result.company = self._normalize_company_abbreviation(rule_result.company)
                 return rule_result
-            return self._fallback_image_parse(settings, image_name)
+            return self._fallback_image_parse(settings, image_name, detail=str(exc))
 
         result = self._merge_parse_results(rule_result, self._build_parse_result(settings, payload), text)
+        result = self._postprocess_parsed_problem(result, source_text=text)
+        if mode == 'image_only':
+            result.source_type = 'image'
         result.company = self._normalize_company_abbreviation(result.company)
         return result
+
+    def _postprocess_parsed_problem(self, result: ParsedProblemResult, *, source_text: str = '') -> ParsedProblemResult:
+        processed = result.model_copy(deep=True)
+        markdown = self._repair_fragmented_math_markdown(processed.statement_markdown)
+        if not source_text.strip():
+            markdown = self._strip_non_statement_sections(markdown)
+        processed.statement_markdown = self._normalize_markdown(markdown)
+
+        enrichment_source = source_text.strip() or processed.statement_markdown
+        if self._needs_formula_enrichment(enrichment_source):
+            processed = self._enrich_formulas(processed)
+
+        if not source_text.strip():
+            markdown_with_examples = processed.statement_markdown
+            markdown_without_examples = re.sub(r'\n## 样例\n[\s\S]*$', '', markdown_with_examples.strip()).strip()
+            main_text, extracted_examples = self._extract_examples_from_markdown(processed.statement_markdown)
+            if extracted_examples:
+                processed.examples = extracted_examples
+                processed.statement_markdown = main_text or markdown_without_examples
+            if processed.examples:
+                processed.examples = self._reconcile_examples_with_explanations(processed.examples)
+                processed.examples = self._reconcile_examples_with_sample_section(markdown_with_examples, processed.examples)
+            if processed.examples:
+                if markdown_without_examples:
+                    processed.statement_markdown = markdown_without_examples
+                processed.statement_markdown = self._rebuild_examples_section(processed.statement_markdown, processed.examples)
+
+        processed.statement_markdown = self._normalize_markdown(processed.statement_markdown)
+        return processed
+
+    def _strip_non_statement_sections(self, markdown: str) -> str:
+        text = markdown.strip()
+        removable_sections = ['分析', '题解', '解题思路', '思路']
+        for section in removable_sections:
+            text = re.sub(rf'\n## {re.escape(section)}\n[\s\S]*$', '', text)
+        return text.strip()
+
+    def _rebuild_examples_section(self, markdown: str, examples: list[dict[str, str]]) -> str:
+        base = re.sub(r'\n## 样例\n[\s\S]*$', '', markdown.strip())
+        section = '\n\n## 样例\n\n'
+        for index, example in enumerate(examples, 1):
+            if isinstance(example, dict):
+                input_text = str(example.get('input', '')).strip()
+                output_text = str(example.get('output', '')).strip()
+                explanation = str(example.get('explanation', '')).strip()
+            else:
+                input_text = str(getattr(example, 'input', '')).strip()
+                output_text = str(getattr(example, 'output', '')).strip()
+                explanation = str(getattr(example, 'explanation', '')).strip()
+            section += f'### 样例 {index}\n\n'
+            section += f'**输入：**\n```\n{input_text}\n```\n\n'
+            section += f'**输出：**\n```\n{output_text}\n```\n'
+            if explanation:
+                section += f'\n**说明：**\n{explanation}\n'
+            section += '\n'
+        return (base.rstrip() + section).strip()
+
+    def _reconcile_examples_with_explanations(self, examples: list[object]) -> list[object]:
+        reconciled: list[object] = []
+        for example in examples:
+            if isinstance(example, dict):
+                normalized = {
+                    'input': str(example.get('input', '')).strip(),
+                    'output': str(example.get('output', '')).strip(),
+                    'explanation': str(example.get('explanation', '')).strip(),
+                }
+            else:
+                normalized = {
+                    'input': str(getattr(example, 'input', '')).strip(),
+                    'output': str(getattr(example, 'output', '')).strip(),
+                    'explanation': str(getattr(example, 'explanation', '')).strip(),
+                }
+
+            corrected_output = self._infer_output_from_explanation(normalized['output'], normalized['explanation'])
+            normalized['output'] = corrected_output
+            reconciled.append(normalized)
+        return reconciled
+
+    def _infer_output_from_explanation(self, output_text: str, explanation: str) -> str:
+        output = output_text.strip()
+        explanation_text = explanation.strip()
+        if not output or not explanation_text:
+            return output
+        if not re.fullmatch(r'-?\d+', output):
+            return output
+
+        patterns = [
+            r'总[^\d\n]{0,12}(?:为|是|等于)\s*(-?\d+)',
+            r'答案[^\d\n]{0,12}(?:为|是|等于)\s*(-?\d+)',
+            r'结果[^\d\n]{0,12}(?:为|是|等于)\s*(-?\d+)',
+            r'=\s*(-?\d+)\s*[。.]?\s*$',
+        ]
+        for pattern in patterns:
+            matches = re.findall(pattern, explanation_text)
+            if not matches:
+                continue
+            candidate = matches[-1].strip()
+            if candidate and candidate != output:
+                return candidate
+        return output
+
+    def _reconcile_examples_with_sample_section(self, markdown: str, examples: list[object]) -> list[object]:
+        sample_section_match = re.search(r'## 样例\n([\s\S]*)$', markdown)
+        if not sample_section_match or not examples:
+            return examples
+
+        sample_section = sample_section_match.group(1)
+        equation_values = re.findall(r'((?:-?\d+\s*[+\-]\s*)+-?\d+)\s*=\s*(-?\d+)', sample_section)
+        if not equation_values:
+            return examples
+
+        candidate_output = ''
+        for lhs, rhs in equation_values:
+            terms = [int(part) for part in re.findall(r'-?\d+', lhs)]
+            if not terms:
+                continue
+            computed = terms[0]
+            for operator, value_text in re.findall(r'([+\-])\s*(-?\d+)', lhs):
+                value = int(value_text)
+                computed = computed + value if operator == '+' else computed - value
+            if computed == int(rhs):
+                candidate_output = rhs.strip()
+
+        if not candidate_output:
+            return examples
+
+        reconciled: list[object] = []
+        for example in examples:
+            if isinstance(example, dict):
+                normalized = dict(example)
+                output_text = str(normalized.get('output', '')).strip()
+                if re.fullmatch(r'-?\d+', output_text) and output_text != candidate_output:
+                    normalized['output'] = candidate_output
+                    normalized['explanation'] = self._rewrite_explanation_result(str(normalized.get('explanation', '')), candidate_output)
+                reconciled.append(normalized)
+                continue
+
+            example.output = candidate_output
+            example.explanation = self._rewrite_explanation_result(str(getattr(example, 'explanation', '')), candidate_output)
+            reconciled.append(example)
+        return reconciled
+
+    def _rewrite_explanation_result(self, explanation: str, candidate_output: str) -> str:
+        text = explanation.strip()
+        if not text or not candidate_output:
+            return text
+        patterns = [
+            r'(总[^\d\n]{0,12}(?:为|是|等于)\s*)(-?\d+)',
+            r'((?:之和|总和)[^\d\n]{0,12}(?:为|是|等于)\s*)(-?\d+)',
+            r'(答案[^\d\n]{0,12}(?:为|是|等于)\s*)(-?\d+)',
+            r'(结果[^\d\n]{0,12}(?:为|是|等于)\s*)(-?\d+)',
+        ]
+        for pattern in patterns:
+            updated, count = re.subn(pattern, rf'\g<1>{candidate_output}', text)
+            if count > 0:
+                return updated
+        return text
 
     def _merge_parse_results(
         self,
@@ -830,8 +993,12 @@ class AnalysisService:
             merged = self._enrich_formulas(merged)
         return merged
 
-    def _fallback_image_parse(self, settings: LLMSettings, image_name: str) -> ParsedProblemResult:
+    def _fallback_image_parse(self, settings: LLMSettings, image_name: str, detail: str = '') -> ParsedProblemResult:
         title = image_name.rsplit('.', 1)[0].strip() if image_name.strip() else '图片导入题目'
+        detail_text = detail.strip()
+        description = '图片识别当前未完成，请检查 AI 配置后重试，或补充可复制题面文本。'
+        if detail_text:
+            description = f'{description}\n\n错误详情：{detail_text}'
         return ParsedProblemResult(
             slug='',
             title=title or '图片导入题目',
@@ -839,7 +1006,7 @@ class AnalysisService:
             difficulty='Medium',
             category_slug='simulation',
             statement_markdown=self._normalize_markdown(
-                '## 题目描述\n\n图片识别当前未完成，请检查 AI 配置后重试，或补充可复制题面文本。\n\n## 输入格式\n\n(待识别)\n\n## 输出格式\n\n(待识别)\n'
+                f'## 题目描述\n\n{description}\n\n## 输入格式\n\n(待识别)\n\n## 输出格式\n\n(待识别)\n'
             ),
             tags=[],
             time_limit_ms=2000,
@@ -851,7 +1018,7 @@ class AnalysisService:
             source_ref='',
             external_id='',
             examples=[],
-            analysis='当前仅图片导入依赖 AI 解析，建议检查模型配置或补充题面文本。',
+            analysis=detail_text or '当前仅图片导入依赖 AI 解析，建议检查模型配置或补充题面文本。',
         )
 
     def _normalize_company_abbreviation(self, company: str) -> str:
@@ -1227,6 +1394,53 @@ class AnalysisService:
 
         return main_text.strip(), examples
 
+    def detect_metadata(self, text: str) -> dict:
+        """从文本中自动检测题型和难度"""
+        category_slug = 'simulation'
+        difficulty = 'Medium'
+
+        if not text or len(text) < 20:
+            return {'category_slug': category_slug, 'difficulty': difficulty}
+
+        _CATEGORY_KW: dict[str, list[str]] = {
+            'two-pointers': ['双指针', '快慢指针', '对撞指针'],
+            'sliding-window': ['滑动窗口', '窗口', '子串'],
+            'hashing': ['哈希', '散列', 'hash', '字典', '映射'],
+            'binary-search': ['二分查找', '二分答案', '二分'],
+            'prefix-sum': ['前缀和', '前缀', '差分'],
+            'intervals': ['区间', '合并区间'],
+            'matrix-grid': ['矩阵', '网格', '二维数组'],
+            'linked-list': ['链表'],
+            'stack-queue': ['栈', '队列', '单调队列', '双端队列'],
+            'monotonic-stack': ['单调栈'],
+            'heap-priority-queue': ['堆', '优先队列', '大根堆', '小根堆', 'topk'],
+            'tree': ['树', '二叉树', '层序', '先序', '中序', '后序'],
+            'graphs': ['图', '最短路径', '拓扑排序', '并查集', '连通'],
+            'backtracking': ['回溯', '全排列', '组合', '子集'],
+            'dynamic-programming': ['动态规划', 'dp', '最优子结构', '状态转移', '记搜', '记忆化'],
+            'greedy': ['贪心', '贪心算法', '最优策略'],
+            'bit-manipulation': ['位运算', '异或', '按位', '二进制'],
+            'simulation': ['模拟', '构造', '实现'],
+        }
+        max_score = 0
+        text_lower = text.lower()
+        for slug, keywords in _CATEGORY_KW.items():
+            score = sum(1 for kw in keywords if kw in text)
+            if score > max_score:
+                max_score = score
+                category_slug = slug
+
+        _DIFFICULTY_KW: dict[str, list[str]] = {
+            'Easy': ['简单', 'Easy', '入门', '基础题'],
+            'Hard': ['困难', 'Hard', '极难', '高难度'],
+        }
+        for level, keywords in _DIFFICULTY_KW.items():
+            if any(kw in text for kw in keywords):
+                difficulty = level
+                break
+
+        return {'category_slug': category_slug, 'difficulty': difficulty}
+
     def _parse_rule_based(self, raw_text: str) -> ParsedProblemResult | None:
         import re
 
@@ -1422,6 +1636,21 @@ class AnalysisService:
         )
 
     def _build_multimodal_parse_prompt(self, raw_text: str, mode: str, image_name: str) -> str:
+        if mode == 'image_only':
+            image_section = f'图片文件名：{image_name}\n' if image_name.strip() else ''
+            return (
+                '你是一个算法竞赛题目 OCR 与结构化整理助手。请直接根据题面图片恢复题目内容，并返回 JSON。\n\n'
+                '要求：\n'
+                '1. 只返回 JSON 对象，不要输出代码块。\n'
+                '2. 优先返回这些字段：title、statement_markdown、examples、analysis。\n'
+                '3. statement_markdown 必须整理成规范 Markdown，尽量包含 `## 题目描述`、`## 输入格式`、`## 输出格式`、`## 样例`。\n'
+                '4. 数学公式使用 LaTeX，行内公式用 `$...$`。\n'
+                '5. examples 是数组，每项包含 input、output、explanation。\n'
+                '6. 识别不准的字段可以留空，优先保证题面正文、输入输出格式、样例和公式正确。\n\n'
+                f'{image_section}'
+                '请开始识别。'
+            )
+
         input_strategy = {
             'image_only': '当前只有题面图片，请直接依据图片恢复题面结构、样例和数学公式。',
             'text_plus_image': '当前同时提供了文本和图片。请以文本为主线，以图片校正数学公式、分式、上下标、表格和复杂排版。',
@@ -1445,6 +1674,7 @@ class AnalysisService:
         )
 
     def _build_parse_result(self, settings: LLMSettings, payload: dict) -> ParsedProblemResult:
+        summary = str(payload.get('summary', '')).strip()
         examples = []
         for item in payload.get('examples', []):
             if isinstance(item, dict):
@@ -1456,6 +1686,35 @@ class AnalysisService:
 
         statement = str(payload.get('statement_markdown', '')).strip()
         statement = self._normalize_markdown(statement)
+
+        if not statement and summary:
+            fallback_result = self._parse_rule_based(summary) or self._fallback_parse(settings, summary)
+            title = str(payload.get('title', '')).strip()
+            company = str(payload.get('company', '')).strip()
+            source = str(payload.get('source', '手工')).strip()
+            source_type = str(payload.get('source_type', 'manual')).strip()
+            frequency = str(payload.get('frequency', '中')).strip()
+            source_ref = str(payload.get('source_ref', '')).strip()
+            external_id = str(payload.get('external_id', '')).strip()
+            return ParsedProblemResult(
+                slug=str(payload.get('slug', '')).strip()[:64] or fallback_result.slug,
+                title=title or fallback_result.title,
+                company=company or fallback_result.company,
+                difficulty=str(payload.get('difficulty', 'Medium')) if str(payload.get('difficulty', 'Medium')) in {'Easy', 'Medium', 'Hard'} else fallback_result.difficulty,
+                category_slug=str(payload.get('category_slug', '')).strip() or fallback_result.category_slug,
+                statement_markdown=fallback_result.statement_markdown,
+                tags=[str(t).strip() for t in payload.get('tags', [])[:5]] if isinstance(payload.get('tags', []), list) and payload.get('tags') else fallback_result.tags,
+                time_limit_ms=int(payload.get('time_limit_ms', fallback_result.time_limit_ms or 2000)),
+                memory_limit_kb=int(payload.get('memory_limit_kb', fallback_result.memory_limit_kb or 262144)),
+                source=source or fallback_result.source,
+                source_type=source_type or fallback_result.source_type,
+                frequency=frequency or fallback_result.frequency,
+                year=int(payload['year']) if payload.get('year') is not None else fallback_result.year,
+                source_ref=source_ref or fallback_result.source_ref,
+                external_id=external_id or fallback_result.external_id,
+                examples=examples or fallback_result.examples,
+                analysis=str(payload.get('analysis', '')).strip() or summary,
+            )
 
         valid_difficulties = {'Easy', 'Medium', 'Hard'}
         difficulty = str(payload.get('difficulty', 'Medium'))

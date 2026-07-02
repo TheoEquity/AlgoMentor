@@ -1,40 +1,45 @@
 export type NavigationKey = 'library' | 'training' | 'review' | 'system'
 
-const navigationItems: Array<{ key: NavigationKey; label: string; hint: string }> = [
-  { key: 'library', label: '题库', hint: '84 题' },
-  { key: 'training', label: '训练', hint: '今日 3 次' },
-  { key: 'review', label: '复盘', hint: '错题 12' },
-  { key: 'system', label: '系统管理', hint: 'LLM' },
-]
+const _defaultHints: Record<NavigationKey, string> = {
+  library: '-- 题',
+  training: '-- 次',
+  review: '--',
+  system: 'LLM',
+}
 
 type MainSidebarProps = {
   activeKey: NavigationKey
   onNavigate: (key: NavigationKey) => void
+  hints?: Partial<Record<NavigationKey, string>>
 }
 
-export function MainSidebar({ activeKey, onNavigate }: MainSidebarProps) {
+export function MainSidebar({ activeKey, onNavigate, hints = {} }: MainSidebarProps) {
   return (
     <aside className="main-sidebar">
       <div className="brand-block">
-        <div className="brand-mark">BH</div>
+        <div className="brand-mark">AM</div>
         <div>
-          <div className="brand-title">ByteHunter</div>
-          <div className="brand-subtitle">白底训练工作台骨架</div>
+          <div className="brand-title">AlgoMentor</div>
+          <div className="brand-subtitle">AI驱动的编程练习平台</div>
         </div>
       </div>
 
       <nav className="nav-list" aria-label="主导航">
-        {navigationItems.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className={`nav-item${item.key === activeKey ? ' active' : ''}`}
-            onClick={() => onNavigate(item.key)}
-          >
-            <span>{item.label}</span>
-            <span>{item.hint}</span>
-          </button>
-        ))}
+        {(['library', 'training', 'review', 'system'] as NavigationKey[]).map((key) => {
+          const label = { library: '题库', training: '训练', review: '复盘', system: '系统管理' }[key]
+          const hint = hints[key] ?? _defaultHints[key]
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`nav-item${key === activeKey ? ' active' : ''}`}
+              onClick={() => onNavigate(key)}
+            >
+              <span>{label}</span>
+              <span>{hint}</span>
+            </button>
+          )
+        })}
       </nav>
     </aside>
   )

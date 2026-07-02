@@ -14,6 +14,7 @@ class LLMSettingsBase(BaseModel):
     provider: LLMProvider = 'OpenAI Compatible'
     endpoint_url: str = Field(default='https://api.openai.com/v1')
     solution_model: str = Field(min_length=1, default='gpt-4.1-mini')
+    vision_model: str = Field(min_length=1, default='gpt-4.1-mini')
     attribution_model: str = Field(min_length=1, default='gpt-4.1-mini')
     review_model: str = Field(min_length=1, default='gpt-4.1-mini')
     solution_temperature: float = Field(default=0.2, ge=0.0, le=2.0)

@@ -3,6 +3,7 @@ export type ProblemListItem = {
   slug: string
   title: string
   company: string
+  position: string
   difficulty: string
   category_slug: string
   tags: string[]
@@ -35,6 +36,7 @@ export type ProblemCreatePayload = {
   slug: string
   title: string
   company: string
+  position: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
   category_slug: string
   statement_markdown: string
@@ -66,4 +68,44 @@ export type ProblemDetail = ProblemListItem & {
   external_id?: string | null
   examples: ProblemExample[]
   test_cases: ProblemTestCase[]
+}
+
+export type ProblemImportSample = {
+  input: string
+  output: string
+  explanation: string
+}
+
+export type ProblemImportPayload = {
+  source?: string
+  title: string
+  description_html?: string
+  description_text?: string
+  source_url?: string
+  samples: ProblemImportSample[]
+}
+
+export type OfflineProblemExtractPayload = {
+  file_name: string
+  file_content: string
+  source_url?: string
+}
+
+export type OfflineProblemCandidate = {
+  title: string
+  description_html: string
+  description_text: string
+  source_url: string
+  samples: ProblemImportSample[]
+}
+
+export type ProblemBatchImportPayload = {
+  problems: ProblemImportPayload[]
+}
+
+export type PaginatedProblemsResponse = {
+  items: ProblemListItem[]
+  total: number
+  page: number
+  page_size: number
 }

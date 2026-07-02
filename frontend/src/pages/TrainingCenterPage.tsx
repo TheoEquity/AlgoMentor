@@ -207,8 +207,6 @@ export function TrainingCenterPage({ onOpenProblem }: TrainingCenterPageProps) {
           </div>
         </>
       )}
-
-      <div className="backend-note">当前页面使用 <code>/api/v1/training/overview</code> 汇总最近训练记录、错误分布和继续训练推荐。</div>
     </section>
   )
 }

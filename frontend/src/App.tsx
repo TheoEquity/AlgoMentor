@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 
 import { AppFrame } from './components/AppFrame'
 import type { NavigationKey } from './components/MainSidebar'
-import { getProblem } from './lib/problemApi'
+import { getProblem, listProblems } from './lib/problemApi'
 import { listCategories } from './lib/categoryApi'
+import { getTrainingOverview } from './lib/trainingApi'
+import { listReviews } from './lib/reviewApi'
 import { ProblemDetailPage } from './pages/ProblemDetailPage'
 import { ProblemCreatePage } from './pages/ProblemCreatePage'
 import { ProblemLibraryPage } from './pages/ProblemLibraryPage'
@@ -69,6 +71,34 @@ function App() {
   const [problemError, setProblemError] = useState('')
   const [problemReloadSeed, setProblemReloadSeed] = useState(0)
   const [createPageOpen, setCreatePageOpen] = useState(false)
+  const [hintsRefreshSeed, setHintsRefreshSeed] = useState(0)
+  const [sidebarHints, setSidebarHints] = useState<Partial<Record<NavigationKey, string>>>({})
+
+  useEffect(() => {
+    if (createPageOpen) {
+      document.title = '新增题目 - AlgoMentor'
+      return
+    }
+    const titles: Record<NavigationKey, string> = {
+      library: '题库 - AlgoMentor',
+      training: '训练 - AlgoMentor',
+      review: '复盘 - AlgoMentor',
+      system: '系统管理 - AlgoMentor',
+    }
+    document.title = titles[activeNav]
+  }, [activeNav, createPageOpen])
+
+  useEffect(() => {
+    void listProblems({ pageSize: 1 })
+      .then((result) => setSidebarHints((prev) => ({ ...prev, library: `${result.total} 题` })))
+      .catch(() => {})
+    void getTrainingOverview()
+      .then((data) => setSidebarHints((prev) => ({ ...prev, training: `今日 ${data.summary.total_runs} 次` })))
+      .catch(() => {})
+    void listReviews({ wrong_only: true })
+      .then((data) => setSidebarHints((prev) => ({ ...prev, review: `错题 ${data.summary.wrong_submissions}` })))
+      .catch(() => {})
+  }, [hintsRefreshSeed])
 
   useEffect(() => {
     if (selectedProblemId === null) {
@@ -142,12 +172,17 @@ function App() {
     <AppFrame
       activeNav={activeNav}
       onNavigate={handleNavigate}
+      hints={sidebarHints}
     >
       {createPageOpen ? (
         <ProblemCreatePage
-          onBack={() => setCreatePageOpen(false)}
+          onBack={() => {
+            setCreatePageOpen(false)
+            setHintsRefreshSeed((s) => s + 1)
+          }}
           onProblemCreated={(problemId) => {
             setCreatePageOpen(false)
+            setHintsRefreshSeed((s) => s + 1)
             navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
           }}
         />

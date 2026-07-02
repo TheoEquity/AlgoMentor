@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
+from json import JSONDecodeError
 from urllib import error, request
 
 from schemas.llm_settings import LLMSettings
@@ -117,17 +119,12 @@ class LLMClient:
         payload = {
             'model': model,
             'temperature': temperature,
-            'response_format': {'type': 'json_object'},
             'messages': [
-                {
-                    'role': 'system',
-                    'content': '你是算法训练平台的 AI 助手。请严格返回 JSON 对象。',
-                },
                 {
                     'role': 'user',
                     'content': [
-                        {'type': 'text', 'text': prompt},
                         {'type': 'image_url', 'image_url': {'url': image_data_url}},
+                        {'type': 'text', 'text': f'{prompt}\n\n请仅返回 JSON 对象，不要输出代码块。'},
                     ],
                 },
             ],
@@ -136,9 +133,16 @@ class LLMClient:
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {api_key}',
         }
-        response = self._post_json(url, headers, payload)
-        content = response['choices'][0]['message']['content']
-        return self._parse_json_content(content)
+        response = self._post_json(url, headers, payload, timeout=120)
+        content = self._extract_openai_message_text(response)
+        structured = self._extract_problem_payload_from_text(content)
+        if structured:
+            return structured
+        parsed = self._parse_json_content(content)
+        if not parsed:
+            snippet = content.strip().replace('\n', '\\n')[:400]
+            raise LLMClientError(f'视觉模型返回空对象。原始内容片段：{snippet or "<empty>"}')
+        return parsed
 
     def _call_openai_text(
         self,
@@ -163,7 +167,7 @@ class LLMClient:
             'Authorization': f'Bearer {api_key}',
         }
         response = self._post_json(url, headers, payload)
-        return response['choices'][0]['message']['content']
+        return self._extract_openai_message_text(response)
 
     def _call_anthropic_text(
         self,
@@ -189,7 +193,7 @@ class LLMClient:
             'x-api-key': api_key,
             'anthropic-version': '2023-06-01',
         }
-        response = self._post_json(url, headers, payload)
+        response = self._post_json(url, headers, payload, timeout=120)
         return response['content'][0]['text']
 
     def _stream_openai_compatible(
@@ -393,7 +397,7 @@ class LLMClient:
         except TimeoutError as exc:
             raise LLMClientError('模型请求超时，请检查 endpoint 可达性和响应时间。') from exc
 
-    def _post_json(self, url: str, headers: dict[str, str], payload: dict) -> dict:
+    def _post_json(self, url: str, headers: dict[str, str], payload: dict, timeout: int = 45) -> dict:
         req = request.Request(
             url=url,
             data=json.dumps(payload).encode('utf-8'),
@@ -402,7 +406,7 @@ class LLMClient:
         )
 
         try:
-            with request.urlopen(req, timeout=45) as resp:
+            with request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode('utf-8'))
         except error.HTTPError as exc:
             detail = exc.read().decode('utf-8', errors='ignore')
@@ -416,12 +420,158 @@ class LLMClient:
         try:
             return json.loads(content)
         except json.JSONDecodeError:
+            candidate = self._extract_json_object(content)
+            if candidate is not None:
+                return candidate
             return {
                 'title': 'AI 分析结果',
                 'summary': content.strip() or '模型返回了空结果。',
                 'bullets': [],
                 'line_refs': [],
             }
+
+    def _extract_openai_message_text(self, response: dict) -> str:
+        content = response['choices'][0]['message'].get('content', '')
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                text = item.get('text')
+                if isinstance(text, str) and text.strip():
+                    parts.append(text)
+                    continue
+                if item.get('type') == 'output_text':
+                    text = item.get('text', '')
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text)
+            return '\n'.join(part.strip() for part in parts if part and part.strip())
+        return str(content)
+
+    def _extract_problem_payload_from_text(self, content: str) -> dict:
+        text = self._strip_outer_code_fence(content)
+        if '"statement_markdown"' not in text and '"title"' not in text:
+            return {}
+
+        payload: dict[str, object] = {}
+
+        title = self._extract_named_string_field(text, 'title')
+        if title:
+            payload['title'] = title
+
+        statement = self._extract_multiline_string_field(text, 'statement_markdown', 'examples')
+        if statement:
+            payload['statement_markdown'] = statement
+
+        analysis = self._extract_trailing_string_field(text, 'analysis')
+        if analysis:
+            payload['analysis'] = analysis
+
+        examples_block = self._extract_array_field(text, 'examples', 'analysis')
+        if examples_block:
+            try:
+                parsed_examples = json.loads(examples_block)
+            except JSONDecodeError:
+                parsed_examples = []
+            if isinstance(parsed_examples, list):
+                payload['examples'] = parsed_examples
+
+        return payload
+
+    def _strip_outer_code_fence(self, content: str) -> str:
+        text = content.strip()
+        if not text.startswith('```'):
+            return text
+        first_newline = text.find('\n')
+        if first_newline == -1:
+            return text
+        last_fence = text.rfind('```')
+        if last_fence <= first_newline:
+            return text[first_newline + 1:].strip()
+        return text[first_newline + 1:last_fence].strip()
+
+    def _extract_named_string_field(self, text: str, field_name: str) -> str:
+        match = re.search(rf'"{re.escape(field_name)}"\s*:\s*"((?:\\.|[^"\\])*)"', text, re.DOTALL)
+        if not match:
+            return ''
+        return self._decode_model_string(match.group(1))
+
+    def _extract_multiline_string_field(self, text: str, field_name: str, next_field_name: str) -> str:
+        match = re.search(
+            rf'"{re.escape(field_name)}"\s*:\s*"([\s\S]*?)"\s*,\s*"{re.escape(next_field_name)}"\s*:',
+            text,
+            re.DOTALL,
+        )
+        if not match:
+            return ''
+        return self._decode_model_string(match.group(1))
+
+    def _extract_trailing_string_field(self, text: str, field_name: str) -> str:
+        match = re.search(rf'"{re.escape(field_name)}"\s*:\s*"([\s\S]*?)"\s*$', text.rstrip().rstrip('}').rstrip(), re.DOTALL)
+        if not match:
+            return ''
+        return self._decode_model_string(match.group(1))
+
+    def _extract_array_field(self, text: str, field_name: str, next_field_name: str) -> str:
+        match = re.search(
+            rf'"{re.escape(field_name)}"\s*:\s*(\[[\s\S]*?\])\s*,\s*"{re.escape(next_field_name)}"\s*:',
+            text,
+            re.DOTALL,
+        )
+        if not match:
+            return ''
+        return match.group(1).strip()
+
+    def _decode_model_string(self, value: str) -> str:
+        decoded = value.replace('\\n', '\n')
+        decoded = decoded.replace('\\t', '\t')
+        decoded = decoded.replace('\\"', '"')
+        decoded = decoded.replace('\\/', '/')
+        decoded = decoded.replace('\\\\', '\\')
+        return decoded.strip()
+
+    def _extract_json_object(self, content: str) -> dict | None:
+        fenced_match = self._extract_fenced_json(content)
+        if fenced_match is not None:
+            return fenced_match
+
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(content):
+            if char != '{':
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(content[index:])
+            except JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _extract_fenced_json(self, content: str) -> dict | None:
+        marker = '```'
+        start = content.find(marker)
+        while start != -1:
+            fence_end = content.find('\n', start)
+            if fence_end == -1:
+                return None
+            end = content.find(marker, fence_end + 1)
+            if end == -1:
+                return None
+            candidate = content[fence_end + 1:end].strip()
+            try:
+                parsed = json.loads(candidate)
+            except JSONDecodeError:
+                start = content.find(marker, end + len(marker))
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+            start = content.find(marker, end + len(marker))
+        return None
 
     def _parse_data_url(self, value: str) -> tuple[str, str]:
         prefix = 'data:'

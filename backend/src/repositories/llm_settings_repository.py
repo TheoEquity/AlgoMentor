@@ -40,7 +40,7 @@ class LLMSettingsRepository:
                 '''
                 UPDATE llm_settings
                 SET provider = %s, endpoint_url = %s,
-                    solution_model = %s, attribution_model = %s, review_model = %s,
+                    solution_model = %s, vision_model = %s, attribution_model = %s, review_model = %s,
                     solution_temperature = %s, attribution_temperature = %s,
                     review_temperature = %s, api_key_secret = %s,
                     enabled = %s, updated_at = %s
@@ -50,6 +50,7 @@ class LLMSettingsRepository:
                     payload.provider,
                     payload.endpoint_url,
                     payload.solution_model,
+                    payload.vision_model,
                     payload.attribution_model,
                     payload.review_model,
                     payload.solution_temperature,
@@ -70,6 +71,7 @@ class LLMSettingsRepository:
             provider=row['provider'],
             endpoint_url=row['endpoint_url'],
             solution_model=row['solution_model'],
+            vision_model=row['vision_model'],
             attribution_model=row['attribution_model'],
             review_model=row['review_model'],
             solution_temperature=row['solution_temperature'],

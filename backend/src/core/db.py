@@ -114,6 +114,7 @@ def initialize_database(database_url: str) -> None:
                 provider TEXT NOT NULL,
                 endpoint_url TEXT NOT NULL,
                 solution_model TEXT NOT NULL,
+                vision_model TEXT NOT NULL,
                 attribution_model TEXT NOT NULL,
                 review_model TEXT NOT NULL,
                 solution_temperature REAL NOT NULL,
@@ -165,6 +166,10 @@ def initialize_database(database_url: str) -> None:
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS year INTEGER"
         )
         cursor.execute(
+            "ALTER TABLE llm_settings ADD COLUMN IF NOT EXISTS vision_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'"
+        )
+
+        cursor.execute(
             "UPDATE problems SET status = '未开始' WHERE status IN ('published', 'draft')"
         )
         cursor.execute(
@@ -180,14 +185,15 @@ def initialize_database(database_url: str) -> None:
                 '''
                 INSERT INTO llm_settings (
                     id, provider, endpoint_url,
-                    solution_model, attribution_model, review_model,
+                    solution_model, vision_model, attribution_model, review_model,
                     solution_temperature, attribution_temperature, review_temperature,
                     api_key_secret, enabled, updated_at
-                ) VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''',
                 (
                     'OpenAI Compatible',
                     'https://api.openai.com/v1',
+                    'gpt-4.1-mini',
                     'gpt-4.1-mini',
                     'gpt-4.1-mini',
                     'gpt-4.1-mini',
