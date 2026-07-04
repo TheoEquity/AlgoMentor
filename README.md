@@ -65,6 +65,13 @@ AlgoMentor
 
 `backend/src/data/database_seed.sql` 导出了除 `llm_settings` 外的本地数据，可用于初始化题库、提交记录和复盘数据。
 
+### 题库数据文件
+
+| 文件 | 内容 | 说明 |
+|------|------|------|
+| `database_seed.sql` | 公司、题型分类、少量示例题目 | 表结构初始化 + 基础配置 |
+| `problems_export.sql` | 全部 303 道题目及测试用例 | 核心题库资产，可独立导入 |
+
 ## 安装说明
 
 ### 1. 克隆仓库
@@ -88,27 +95,43 @@ postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter
 export BYTEHUNTER_DATABASE_URL="postgresql://<USER>:<PASSWORD>@<HOST>:<PORT>/<DATABASE>"
 ```
 
-后端启动时会自动创建基础表结构。
+### 3. 启动后端（自动建表）
 
-### 3. 导入非 LLM 种子数据
-
-```bash
-psql "$BYTEHUNTER_DATABASE_URL" -f backend/src/data/database_seed.sql
-```
-
-如果使用默认连接，也可以执行：
-
-```bash
-psql "postgresql://bytehunter:bytehunter123@localhost:5432/bytehunter" -f backend/src/data/database_seed.sql
-```
-
-### 4. 启动后端
+先启动一次后端，让其自动创建数据库表结构，然后按 `Ctrl+C` 停止：
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cd src
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### 4. 导入题库数据
+
+**重要**：必须先执行步骤 3 创建表结构，再导入数据。
+
+```bash
+# 导入基础配置（公司、题型分类、种子题目）
+PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/database_seed.sql
+
+# 导入全部 303 道题目及测试用例
+PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/problems_export.sql
+```
+
+如果已通过环境变量配置了数据库连接，可直接使用：
+
+```bash
+psql "$BYTEHUNTER_DATABASE_URL" -f backend/src/data/database_seed.sql
+psql "$BYTEHUNTER_DATABASE_URL" -f backend/src/data/problems_export.sql
+```
+
+### 5. 重新启动后端
+
+```bash
+cd backend
+source .venv/bin/activate
 cd src
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -125,7 +148,7 @@ API 前缀为：
 /api/v1
 ```
 
-### 5. 启动前端
+### 6. 启动前端
 
 ```bash
 cd frontend
@@ -139,7 +162,7 @@ npm run dev -- --host 0.0.0.0 --port 5173
 http://localhost:5173
 ```
 
-### 6. 配置 AI 能力
+### 7. 配置 AI 能力
 
 进入前端系统设置页面，填写 LLM Provider、Endpoint、模型名和 API Key。仓库中的种子数据不包含 LLM 配置和密钥。
 
