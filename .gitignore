@@ -175,3 +175,6 @@
 *.lzma
 *.iso
 backend/src/bytehunter.db
+
+# Test mhtml fixtures
+*.mhtml
