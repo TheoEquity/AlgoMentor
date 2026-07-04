@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
+import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { runAgent } from '../lib/agentApi'
 import { getTrainingOverview } from '../lib/trainingApi'
+import type { AgentRunResult } from '../types/agent'
 import type { TrainingOverviewResponse } from '../types/training'
 
 type TrainingCenterPageProps = {
@@ -27,6 +30,9 @@ export function TrainingCenterPage({ onOpenProblem }: TrainingCenterPageProps) {
   const [loading, setLoading] = useState(true)
   const [requestError, setRequestError] = useState('')
   const [reloadSeed, setReloadSeed] = useState(0)
+  const [coachResult, setCoachResult] = useState<AgentRunResult | null>(null)
+  const [isCoachLoading, setIsCoachLoading] = useState(false)
+  const [coachError, setCoachError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +67,33 @@ export function TrainingCenterPage({ onOpenProblem }: TrainingCenterPageProps) {
   const errorBuckets = response?.error_buckets ?? []
   const recommendations = response?.recommendations ?? []
 
+  const handleCoachAnalysis = async () => {
+    setIsCoachLoading(true)
+    setCoachError('')
+    try {
+      const result = await runAgent('coach-agent', {
+        context: {
+          task: 'training_analysis',
+          training_stats: summary || {},
+          recent_items: recentItems.slice(0, 10).map((item) => ({
+            title: item.title,
+            problem_id: item.problem_id,
+            verdict: item.verdict,
+            language: item.language,
+            run_type: item.run_type,
+            created_at: item.created_at,
+          })),
+          error_buckets: errorBuckets,
+        },
+      })
+      setCoachResult(result)
+    } catch (error) {
+      setCoachError(error instanceof Error ? error.message : '教练分析失败')
+    } finally {
+      setIsCoachLoading(false)
+    }
+  }
+
   return (
     <section className="training-layout">
       <div className="page-header">
@@ -90,6 +123,29 @@ export function TrainingCenterPage({ onOpenProblem }: TrainingCenterPageProps) {
         <div className="empty-panel">正在加载训练统计...</div>
       ) : (
         <>
+          <article className="detail-card">
+            <div className="ai-card-header">
+              <div>
+                <h2>AI 教练建议 <span className="agent-badge">coach-agent</span></h2>
+                <p>综合训练数据，生成个性化训练计划、薄弱点分析和下一轮学习建议。</p>
+              </div>
+              <button type="button" className="button primary" disabled={isCoachLoading} onClick={() => void handleCoachAnalysis()}>
+                {isCoachLoading ? '分析中...' : coachResult ? '重新生成' : '生成训练建议'}
+              </button>
+            </div>
+            {coachError ? <div className="backend-note">教练分析失败：{coachError}</div> : null}
+            {coachResult ? (
+              <div className="ai-analysis-block">
+                <MarkdownRenderer className="problem-markdown" markdown={coachResult.content} />
+                <div className="analysis-meta-text" style={{ marginTop: 'var(--space-3)' }}>
+                  Token: {coachResult.token_usage?.total_tokens ?? 0} | 迭代: {coachResult.iterations} | 工具调用: {coachResult.tool_calls_trace?.length ?? 0} | 耗时: {coachResult.duration_ms}ms
+                </div>
+              </div>
+            ) : (
+              <div className="empty-panel">点击上方按钮，让 AI 教练分析你的训练数据并给出建议。</div>
+            )}
+          </article>
+
           <div className="training-overview-grid">
             <section className="settings-card table-card training-card">
               <div className="training-card-header">

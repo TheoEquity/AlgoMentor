@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { runAgent } from '../lib/agentApi'
 import { listReviews } from '../lib/reviewApi'
 import { getSubmission } from '../lib/submissionApi'
+import type { AgentRunResult } from '../types/agent'
 import type { ReviewItem, ReviewListResponse, ReviewSummary } from '../types/review'
 import type { SubmissionResult } from '../types/submission'
 
@@ -74,6 +77,9 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionResult | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [coachResult, setCoachResult] = useState<AgentRunResult | null>(null)
+  const [isCoachLoading, setIsCoachLoading] = useState(false)
+  const [coachError, setCoachError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -138,6 +144,42 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
       setDetailError(error instanceof Error ? error.message : '记录详情加载失败')
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  const handleCoachReview = async () => {
+    setIsCoachLoading(true)
+    setCoachError('')
+    try {
+      const result = await runAgent('coach-agent', {
+        context: {
+          task: 'review_analysis',
+          summary: {
+            total_submissions: summary.total_submissions,
+            wrong_submissions: summary.wrong_submissions,
+            ac_submissions: summary.ac_submissions,
+            top_error_type: summary.top_error_type,
+          },
+          review_items: items.slice(0, 20).map((item) => ({
+            title: item.title,
+            company: item.company,
+            difficulty: item.difficulty,
+            verdict: item.verdict,
+            error_type: item.error_type,
+            language: item.language,
+            run_type: item.run_type,
+            category_slug: item.category_slug,
+            tags: item.tags,
+            failed_case_summary: item.failed_case_summary,
+            created_at: item.created_at,
+          })),
+        },
+      })
+      setCoachResult(result)
+    } catch (error) {
+      setCoachError(error instanceof Error ? error.message : '教练分析失败')
+    } finally {
+      setIsCoachLoading(false)
     }
   }
 
@@ -207,6 +249,29 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
           </button>
         </div>
       ) : null}
+
+      <article className="detail-card" style={{ marginBottom: 'var(--space-4)' }}>
+        <div className="ai-card-header">
+          <div>
+            <h2>AI 教练复盘 <span className="agent-badge">coach-agent</span></h2>
+            <p>综合分析错误类型、薄弱题型和提交记录，生成阶段性复盘建议和改进方向。</p>
+          </div>
+          <button type="button" className="button primary" disabled={isCoachLoading} onClick={() => void handleCoachReview()}>
+            {isCoachLoading ? '分析中...' : coachResult ? '重新生成' : '生成复盘分析'}
+          </button>
+        </div>
+        {coachError ? <div className="backend-note">教练分析失败：{coachError}</div> : null}
+        {coachResult ? (
+          <div className="ai-analysis-block">
+            <MarkdownRenderer className="problem-markdown" markdown={coachResult.content} />
+            <div className="analysis-meta-text" style={{ marginTop: 'var(--space-3)' }}>
+              Token: {coachResult.token_usage?.total_tokens ?? 0} | 迭代: {coachResult.iterations} | 工具调用: {coachResult.tool_calls_trace?.length ?? 0} | 耗时: {coachResult.duration_ms}ms
+            </div>
+          </div>
+        ) : (
+          <div className="empty-panel">点击上方按钮，让 AI 教练分析你的复盘数据并给出改进建议。</div>
+        )}
+      </article>
 
       <div className="table-card">
         {loading ? (
@@ -322,19 +387,14 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
                     {getAnalysisStatusLabel(selectedSubmission.attribution_analysis.execution_status)}
                   </div>
                 ) : null}
-                <p className="review-detail-summary">
-                  {selectedSubmission.attribution_analysis?.summary ?? '当前还没有保存的错误归因，可以回到题目页继续触发。'}
-                </p>
+                <div className="diagnostic-list">
+                  <div className="diagnostic-item">
+                    <MarkdownRenderer markdown={selectedSubmission.attribution_analysis?.summary ?? '当前还没有保存的错误归因，可以回到题目页继续触发。'} />
+                  </div>
+                </div>
                 {selectedSubmission.attribution_analysis?.status_reason ? (
                   <div className="backend-note">状态说明：{selectedSubmission.attribution_analysis.status_reason}</div>
                 ) : null}
-                <div className="diagnostic-list">
-                  {(selectedSubmission.attribution_analysis?.bullets ?? []).map((item) => (
-                    <div key={item} className="diagnostic-item">
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               <div className="review-detail-card">
@@ -344,17 +404,14 @@ export function ReviewCenterPage({ onOpenProblem }: ReviewCenterPageProps) {
                     {getAnalysisStatusLabel(selectedSubmission.review_analysis.execution_status)}
                   </div>
                 ) : null}
-                <p className="review-detail-summary">
-                  {selectedSubmission.review_analysis?.summary ?? '当前还没有保存的训练复盘，可以回到题目页继续触发。'}
-                </p>
+                <div className="diagnostic-list">
+                  <div className="diagnostic-item">
+                    <MarkdownRenderer markdown={selectedSubmission.review_analysis?.summary ?? '当前还没有保存的训练复盘，可以回到题目页继续触发。'} />
+                  </div>
+                </div>
                 {selectedSubmission.review_analysis?.status_reason ? (
                   <div className="backend-note">状态说明：{selectedSubmission.review_analysis.status_reason}</div>
                 ) : null}
-                <ul className="review-bullet-list">
-                  {(selectedSubmission.review_analysis?.bullets ?? []).map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
               </div>
 
               <div className="review-detail-card review-detail-card-full">

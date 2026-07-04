@@ -55,6 +55,7 @@ export type ProblemCreatePayload = {
   external_id: string
   status: ProblemLatestStatus
   test_cases: ProblemTestCase[]
+  analysis_json?: string | null
 }
 
 export type ProblemDetail = ProblemListItem & {
@@ -68,6 +69,7 @@ export type ProblemDetail = ProblemListItem & {
   external_id?: string | null
   examples: ProblemExample[]
   test_cases: ProblemTestCase[]
+  analysis_json?: string | null
 }
 
 export type ProblemImportSample = {

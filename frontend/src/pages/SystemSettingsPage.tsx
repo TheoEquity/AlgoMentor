@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react'
 import { getLLMSettings, updateLLMSettings } from '../lib/llmSettingsApi'
 import { createCompany, deleteCompany, listCompanies } from '../lib/companyApi'
 import { createCategory, deleteCategory, listCategories, updateCategory } from '../lib/categoryApi'
+import { listAgents, updateAgent, listTools, listSkills } from '../lib/agentApi'
 import type { LLMProvider, LLMSettingsPayload } from '../types/llmSettings'
+import type { AgentConfig, ToolConfig, SkillConfig } from '../types/agent'
 
 const defaultForm: LLMSettingsPayload = {
   provider: 'OpenAI Compatible',
@@ -21,14 +23,14 @@ const defaultForm: LLMSettingsPayload = {
 }
 
 export function SystemSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'llm' | 'company' | 'category'>('llm')
+  const [activeTab, setActiveTab] = useState<'llm' | 'agent' | 'company' | 'category'>('llm')
 
   return (
     <section className="settings-layout">
       <div className="page-header">
         <div>
           <h1>系统管理</h1>
-          <p>集中配置 AI 模型、题库公司与题型分类。</p>
+          <p>集中配置 AI 模型、AI Agent、题库公司与题型分类。</p>
         </div>
       </div>
 
@@ -39,6 +41,13 @@ export function SystemSettingsPage() {
           onClick={() => setActiveTab('llm')}
         >
           LLM 配置
+        </button>
+        <button
+          type="button"
+          className={`tab-item${activeTab === 'agent' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('agent')}
+        >
+          AI Agent
         </button>
         <button
           type="button"
@@ -57,6 +66,7 @@ export function SystemSettingsPage() {
       </nav>
 
       {activeTab === 'llm' && <LLMConfigTab />}
+      {activeTab === 'agent' && <AgentConfigTab />}
       {activeTab === 'company' && <CompanyConfigTab />}
       {activeTab === 'category' && <CategoryConfigTab />}
     </section>
@@ -703,6 +713,227 @@ function CategoryConfigTab() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+    </>
+  )
+}
+
+function AgentConfigTab() {
+  const [agents, setAgents] = useState<AgentConfig[]>([])
+  const [tools, setTools] = useState<ToolConfig[]>([])
+  const [skills, setSkills] = useState<SkillConfig[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    void loadData()
+  }, [])
+
+  async function loadData() {
+    setIsLoading(true)
+    try {
+      const [agentList, toolList, skillList] = await Promise.all([
+        listAgents(),
+        listTools(),
+        listSkills(),
+      ])
+      setAgents(agentList)
+      setTools(toolList)
+      setSkills(skillList)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载 Agent 配置失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleToggle(agent: AgentConfig) {
+    setError('')
+    try {
+      const updated = await updateAgent(agent.id, { is_enabled: !agent.is_enabled })
+      setAgents((prev) => prev.map((a) => (a.id === agent.id ? updated : a)))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '切换失败')
+    }
+  }
+
+  function openEdit(agent: AgentConfig) {
+    setEditingAgent({ ...agent })
+    setMessage('')
+  }
+
+  function updateEditField<K extends keyof AgentConfig>(field: K, value: AgentConfig[K]) {
+    if (!editingAgent) return
+    setEditingAgent({ ...editingAgent, [field]: value })
+  }
+
+  function toggleToolId(toolId: number) {
+    if (!editingAgent) return
+    const current = editingAgent.tools.map((t) => t.id)
+    const next = current.includes(toolId) ? current.filter((id) => id !== toolId) : [...current, toolId]
+    updateEditField('tool_ids' as keyof AgentConfig, next as unknown as AgentConfig[keyof AgentConfig])
+  }
+
+  function toggleSkillId(skillId: number) {
+    if (!editingAgent) return
+    const current = editingAgent.skills.map((s) => s.id)
+    const next = current.includes(skillId) ? current.filter((id) => id !== skillId) : [...current, skillId]
+    updateEditField('skill_ids' as keyof AgentConfig, next as unknown as AgentConfig[keyof AgentConfig])
+  }
+
+  async function handleSave() {
+    if (!editingAgent) return
+    setIsSaving(true)
+    setError('')
+    try {
+      const payload: Record<string, unknown> = {
+        name: editingAgent.name,
+        description: editingAgent.description,
+        system_prompt: editingAgent.system_prompt,
+        user_prompt_template: editingAgent.user_prompt_template,
+        model: editingAgent.model,
+        temperature: editingAgent.temperature,
+        max_iterations: editingAgent.max_iterations,
+        sort_order: editingAgent.sort_order,
+        tool_ids: editingAgent.tools.map((t) => t.id),
+        skill_ids: editingAgent.skills.map((s) => s.id),
+      }
+      const updated = await updateAgent(editingAgent.id, payload)
+      setAgents((prev) => prev.map((a) => (a.id === editingAgent.id ? updated : a)))
+      setEditingAgent(null)
+      setMessage(`Agent "${updated.name}" 已更新`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <>
+      {error ? <div className="backend-note action-note">{error}</div> : null}
+      {message ? <div className="backend-note success-note">{message}</div> : null}
+
+      {isLoading ? (
+        <div className="empty-panel" style={{ marginTop: 16 }}>正在加载 Agent 配置...</div>
+      ) : (
+        <div className="detail-card" style={{ marginTop: 16 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-subtle)', textAlign: 'left' }}>
+                <th style={{ width: 40, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>#</th>
+                <th style={{ width: 100, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>名称</th>
+                <th style={{ width: 140, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>描述</th>
+                <th style={{ width: 240, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>模型</th>
+                <th style={{ width: 50, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>温度</th>
+                <th style={{ width: 120, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>状态</th>
+                <th style={{ width: 130, padding: '0 12px', height: 44, fontWeight: 600, fontSize: 13, textAlign: 'left' }}>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent) => (
+                <tr key={agent.id} style={{ borderBottom: '1px solid var(--border-default)', fontSize: 13 }}>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left' }}>{agent.sort_order}</td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><strong title={agent.slug}>{agent.name}</strong></td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={agent.description}>
+                    {agent.description}
+                  </td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left' }}><code style={{ fontSize: '0.85rem' }}>{agent.model}</code></td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left' }}>{agent.temperature}</td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left' }}>
+                    <span className={`status-badge ${agent.is_enabled ? 'status-ac' : ''}`}>
+                      {agent.is_enabled ? '启用' : '禁用'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0 12px', height: 44, textAlign: 'left', whiteSpace: 'nowrap' }}>
+                    <button type="button" className="button ghost" onClick={() => openEdit(agent)}>编辑</button>
+                    <button type="button" className="button ghost" onClick={() => void handleToggle(agent)}>
+                      {agent.is_enabled ? '禁用' : '启用'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editingAgent && (
+        <div className="modal-overlay" onClick={() => setEditingAgent(null)}>
+          <div className="modal-content agent-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>编辑 Agent: {editingAgent.slug}</h2>
+              <button type="button" className="button ghost" onClick={() => setEditingAgent(null)}>X</button>
+            </div>
+
+            <div className="agent-edit-body">
+              <div className="settings-form-grid">
+                <label className="settings-field">
+                  <span>名称</span>
+                  <input type="text" value={editingAgent.name} onChange={(e) => updateEditField('name', e.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>模型</span>
+                  <input type="text" value={editingAgent.model} onChange={(e) => updateEditField('model', e.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>温度 ({editingAgent.temperature})</span>
+                  <input type="range" min="0" max="2" step="0.1" value={editingAgent.temperature} onChange={(e) => updateEditField('temperature', parseFloat(e.target.value))} />
+                </label>
+                <label className="settings-field">
+                  <span>最大迭代</span>
+                  <input type="number" min={1} max={50} value={editingAgent.max_iterations} onChange={(e) => updateEditField('max_iterations', parseInt(e.target.value, 10))} />
+                </label>
+                <label className="settings-field settings-field-full">
+                  <span>描述</span>
+                  <input type="text" value={editingAgent.description} onChange={(e) => updateEditField('description', e.target.value)} />
+                </label>
+                <label className="settings-field settings-field-full">
+                  <span>系统提示词</span>
+                  <textarea rows={6} value={editingAgent.system_prompt} onChange={(e) => updateEditField('system_prompt', e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }} />
+                </label>
+                <label className="settings-field settings-field-full">
+                  <span>用户提示模板 (Jinja2)</span>
+                  <textarea rows={4} value={editingAgent.user_prompt_template} onChange={(e) => updateEditField('user_prompt_template', e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }} />
+                </label>
+              </div>
+
+              <div className="agent-edit-section">
+                <h3>工具 ({editingAgent.tools.length}/{tools.length})</h3>
+                <div className="agent-checkbox-grid">
+                  {tools.map((tool) => (
+                    <label key={tool.id} className="agent-checkbox-item">
+                      <input type="checkbox" checked={editingAgent.tools.some((t) => t.id === tool.id)} onChange={() => toggleToolId(tool.id)} />
+                      <span title={tool.description}>{tool.name} <small>({tool.slug})</small></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="agent-edit-section">
+                <h3>技能 ({editingAgent.skills.length}/{skills.length})</h3>
+                <div className="agent-checkbox-grid">
+                  {skills.map((skill) => (
+                    <label key={skill.id} className="agent-checkbox-item">
+                      <input type="checkbox" checked={editingAgent.skills.some((s) => s.id === skill.id)} onChange={() => toggleSkillId(skill.id)} />
+                      <span title={skill.description}>{skill.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="button ghost" onClick={() => setEditingAgent(null)}>取消</button>
+              <button type="button" className="button primary" disabled={isSaving} onClick={() => void handleSave()}>
+                {isSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

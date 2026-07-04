@@ -22,7 +22,7 @@ class ProblemBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     slug: str = Field(min_length=3)
-    title: str = Field(min_length=2)
+    title: str = Field(min_length=1)
     company: str = Field(min_length=2)
     position: str = Field(default='')
     difficulty: Literal['Easy', 'Medium', 'Hard']
@@ -42,6 +42,7 @@ class ProblemBase(BaseModel):
     source_ref: str = ''
     external_id: str = ''
     status: Literal['未开始', '已通过', '待复盘', '待修正'] = '未开始'
+    analysis_json: str | None = None
 
 
 class ProblemCreate(ProblemBase):
@@ -127,3 +128,4 @@ class ProblemDetail(ProblemListItem):
     external_id: str | None = None
     examples: list[ExampleItem]
     test_cases: list[ProblemTestCase]
+    analysis_json: str | None = None

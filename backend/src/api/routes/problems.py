@@ -417,7 +417,20 @@ def _extract_title(block_html: str) -> str:
     )
     if not match:
         return ''
-    return _strip_html_to_text(match.group(1))
+    title = _strip_html_to_text(match.group(1))
+    if len(title) >= 3:
+        return title
+    body = _extract_body_html(block_html)
+    if body:
+        body_text = _strip_html_to_text(body).strip()
+        body_text = re.sub(r'\\+[a-zA-Z]+\{[^}]*\}', '', body_text)
+        first_sentence = body_text.split('\n')[0].strip()
+        if first_sentence and len(first_sentence) > len(title):
+            combined = f'{title} - {first_sentence}' if title else first_sentence
+            if len(combined) > 80:
+                return combined[:80]
+            return combined
+    return title
 
 
 def _extract_body_html(block_html: str) -> str:

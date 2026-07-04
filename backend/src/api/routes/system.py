@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from config import Settings
 from repositories.company_repository import CompanyRepository
 from repositories.llm_settings_repository import LLMSettingsRepository
 from repositories.problem_category_repository import ProblemCategoryRepository
+from repositories.usage_repository import UsageRepository
+from schemas.agent_run import UsageSummary
 from schemas.companies import Company, CompanyCreate, CompanyUpdate
 from schemas.llm_settings import LLMSettings, LLMSettingsUpdate
 from schemas.problem_categories import CategoryCreate, CategoryUpdate, ProblemCategory
@@ -113,3 +115,18 @@ async def delete_category(
     if not repo.delete_category(category_id):
         raise HTTPException(status_code=404, detail='Category not found')
     return {'message': 'deleted'}
+
+
+def _usage_repo() -> UsageRepository:
+    settings = Settings()
+    return UsageRepository(settings.database_url)
+
+
+@router.get('/ai-usage', response_model=list[UsageSummary])
+async def get_ai_usage(
+    agent: str | None = Query(default=None),
+    from_date: str | None = Query(default=None),
+    to_date: str | None = Query(default=None),
+    repo: UsageRepository = Depends(_usage_repo),
+) -> list[UsageSummary]:
+    return repo.query_usage(agent_slug=agent, from_date=from_date, to_date=to_date)

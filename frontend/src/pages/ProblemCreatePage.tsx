@@ -478,6 +478,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
             <button type="button" className="button primary" disabled={isParsing || !canAiParse} onClick={() => void handleParse()}>
               {isParsing ? '智能解析中...' : '智能解析'}
             </button>
+            <span className="agent-badge">parsing-agent</span>
             <button type="button" className="button" disabled={isParsing || !rawText.trim()} onClick={() => void handleUseRaw()}>
               规则解析
             </button>
@@ -510,6 +511,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
             <button type="button" className="button primary" disabled={isParsing || !canAiParse} onClick={() => void handleParse()}>
               {isParsing ? '图像解析中...' : '图像解析'}
             </button>
+            <span className="agent-badge">parsing-agent</span>
             {imageError ? <span className="save-error-text">{imageError}</span> : null}
             {parseError ? <span className="save-error-text">{parseError}</span> : null}
           </div>

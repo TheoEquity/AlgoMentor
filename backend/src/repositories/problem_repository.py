@@ -83,6 +83,15 @@ class ProblemRepository:
         finally:
             connection.close()
 
+    def save_analysis(self, problem_id: int, analysis_json: str) -> None:
+        connection = get_connection(self.database_url)
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE problems SET analysis_json = %s WHERE id = %s',
+                (analysis_json, problem_id),
+            )
+        connection.close()
+
     def create_problem(self, payload: ProblemCreate) -> ProblemDetail:
         now = datetime.now(UTC).isoformat()
         slug = self._make_unique_slug(payload.slug)
@@ -186,6 +195,7 @@ class ProblemRepository:
                         status = %s,
                         time_limit_ms = %s,
                         memory_limit_kb = %s,
+                        analysis_json = %s,
                         updated_at = %s
                     WHERE id = %s
                     ''',
@@ -211,6 +221,7 @@ class ProblemRepository:
                         payload.status,
                         payload.time_limit_ms,
                         payload.memory_limit_kb,
+                        payload.analysis_json,
                         now,
                         problem_id,
                     ),
@@ -315,6 +326,7 @@ class ProblemRepository:
             time_limit_ms=row.get('time_limit_ms', 2000),
             memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
+            analysis_json=row.get('analysis_json'),
             test_cases=[ProblemRepository._test_case_from_row(tcr) for tcr in test_case_rows],
         )
 

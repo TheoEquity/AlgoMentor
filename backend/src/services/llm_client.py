@@ -71,6 +71,220 @@ class LLMClient:
     def parse_json_content(self, content: str) -> dict:
         return self._parse_json_content(content)
 
+    def chat_with_tools(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        tools: list[dict] | None = None,
+    ) -> dict:
+        if not settings.enabled:
+            raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
+        if not api_key:
+            raise LLMClientError('系统管理中尚未配置 API Key。')
+
+        if settings.provider in ('OpenAI Compatible', 'Custom'):
+            return self._chat_openai(settings, api_key, model, messages, temperature, tools)
+
+        return self._chat_anthropic(settings, api_key, model, messages, temperature, tools)
+
+    def stream_chat(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+    ) -> Iterator[str]:
+        if not settings.enabled:
+            raise LLMClientError('AI 功能当前处于停用状态，请先在系统管理中启用。')
+        if not api_key:
+            raise LLMClientError('系统管理中尚未配置 API Key。')
+
+        if settings.provider in ('OpenAI Compatible', 'Custom'):
+            yield from self._stream_openai_chat(settings, api_key, model, messages, temperature)
+        else:
+            yield from self._stream_anthropic_chat(settings, api_key, model, messages, temperature)
+
+    def _chat_openai(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        tools: list[dict] | None,
+    ) -> dict:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/chat/completions'):
+            url = f'{url}/chat/completions'
+
+        payload: dict = {
+            'model': model,
+            'temperature': temperature,
+            'messages': messages,
+        }
+        if tools:
+            payload['tools'] = tools
+            payload['tool_choice'] = 'auto'
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        }
+        response = self._post_json(url, headers, payload, timeout=300)
+        return response
+
+    def _stream_openai_chat(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+    ) -> Iterator[str]:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/chat/completions'):
+            url = f'{url}/chat/completions'
+
+        payload = {
+            'model': model,
+            'temperature': temperature,
+            'messages': messages,
+            'stream': True,
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        }
+        data = json.dumps(payload).encode('utf-8')
+        req = request.Request(url, data=data, headers=headers, method='POST')
+        try:
+            with request.urlopen(req, timeout=300) as resp:
+                for line_bytes in resp:
+                    line = line_bytes.decode('utf-8', errors='replace').strip()
+                    if line.startswith('data: '):
+                        data_str = line[6:]
+                        if data_str == '[DONE]':
+                            return
+                        try:
+                            chunk = json.loads(data_str)
+                            choices = chunk.get('choices') or [{}]
+                            delta = choices[0].get('delta', {}) if choices else {}
+                            content = delta.get('content', '')
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
+        except error.HTTPError as exc:
+            raise LLMClientError(f'LLM API 请求失败: {exc.code} {exc.reason}') from exc
+        except error.URLError as exc:
+            raise LLMClientError(f'LLM API 连接失败: {exc.reason}') from exc
+        except TimeoutError as exc:
+            raise LLMClientError('LLM API 请求超时，请检查网络或 API 状态。') from exc
+
+    def _chat_anthropic(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        tools: list[dict] | None,
+    ) -> dict:
+        url = settings.endpoint_url.rstrip('/')
+        if not url.endswith('/messages'):
+            url = f'{url}/messages'
+
+        system_msg = ''
+        filtered: list[dict] = []
+        for msg in messages:
+            if msg['role'] == 'system':
+                system_msg = msg['content']
+            elif msg['role'] == 'tool':
+                filtered.append({
+                    'role': 'user',
+                    'content': [{'type': 'tool_result', 'tool_use_id': msg.get('tool_call_id', ''), 'content': msg['content']}],
+                })
+            else:
+                filtered.append({'role': msg['role'], 'content': msg['content']})
+
+        payload: dict = {
+            'model': model,
+            'temperature': temperature,
+            'max_tokens': 2048,
+            'messages': filtered,
+        }
+        if system_msg:
+            payload['system'] = system_msg
+        if tools:
+            anthropic_tools = []
+            for t in tools:
+                func = t.get('function', {})
+                anthropic_tools.append({
+                    'name': func.get('name', ''),
+                    'description': func.get('description', ''),
+                    'input_schema': func.get('parameters', {}),
+                })
+            payload['tools'] = anthropic_tools
+
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+        }
+        response = self._post_json(url, headers, payload, timeout=300)
+        return self._convert_anthropic_response(response)
+
+    def _stream_anthropic_chat(
+        self,
+        settings: LLMSettings,
+        api_key: str,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+    ) -> Iterator[str]:
+        # For streaming, delegate to non-streaming since Anthropic streaming is complex
+        resp = self._chat_anthropic(settings, api_key, model, messages, temperature, None)
+        content = resp.get('choices', [{}])[0].get('message', {}).get('content', '')
+        yield content
+
+    def _convert_anthropic_response(self, response: dict) -> dict:
+        content_blocks = response.get('content', [])
+        text_content = ''
+        tool_calls = []
+        for block in content_blocks:
+            if block.get('type') == 'text':
+                text_content += block.get('text', '')
+            elif block.get('type') == 'tool_use':
+                tool_calls.append({
+                    'id': block.get('id', ''),
+                    'type': 'function',
+                    'function': {
+                        'name': block.get('name', ''),
+                        'arguments': json.dumps(block.get('input', {})),
+                    },
+                })
+
+        usage = response.get('usage', {})
+        return {
+            'choices': [{
+                'message': {
+                    'role': 'assistant',
+                    'content': text_content,
+                    'tool_calls': tool_calls if tool_calls else None,
+                },
+                'finish_reason': response.get('stop_reason', 'end_turn'),
+            }],
+            'usage': {
+                'prompt_tokens': usage.get('input_tokens', 0),
+                'completion_tokens': usage.get('output_tokens', 0),
+                'total_tokens': usage.get('input_tokens', 0) + usage.get('output_tokens', 0),
+            },
+        }
+
     def _call_openai_compatible(
         self,
         settings: LLMSettings,
@@ -133,7 +347,7 @@ class LLMClient:
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {api_key}',
         }
-        response = self._post_json(url, headers, payload, timeout=120)
+        response = self._post_json(url, headers, payload, timeout=300)
         content = self._extract_openai_message_text(response)
         structured = self._extract_problem_payload_from_text(content)
         if structured:
@@ -193,7 +407,7 @@ class LLMClient:
             'x-api-key': api_key,
             'anthropic-version': '2023-06-01',
         }
-        response = self._post_json(url, headers, payload, timeout=120)
+        response = self._post_json(url, headers, payload, timeout=300)
         return response['content'][0]['text']
 
     def _stream_openai_compatible(

@@ -1,10 +1,11 @@
-export type NavigationKey = 'library' | 'training' | 'review' | 'system'
+export type NavigationKey = 'library' | 'training' | 'review' | 'system' | 'chat'
 
 const _defaultHints: Record<NavigationKey, string> = {
   library: '-- 题',
   training: '-- 次',
   review: '--',
   system: 'LLM',
+  chat: 'AI',
 }
 
 type MainSidebarProps = {
@@ -25,8 +26,8 @@ export function MainSidebar({ activeKey, onNavigate, hints = {} }: MainSidebarPr
       </div>
 
       <nav className="nav-list" aria-label="主导航">
-        {(['library', 'training', 'review', 'system'] as NavigationKey[]).map((key) => {
-          const label = { library: '题库', training: '训练', review: '复盘', system: '系统管理' }[key]
+        {(['library', 'training', 'review', 'chat', 'system'] as NavigationKey[]).map((key) => {
+          const label = { library: '题库', training: '训练', review: '复盘', chat: 'AI 对话', system: '系统管理' }[key]
           const hint = hints[key] ?? _defaultHints[key]
           return (
             <button

@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
-import { analyzeProblem, chatProblem } from '../lib/analysisApi'
+import { analyzeProblem } from '../lib/analysisApi'
 import { listCategories } from '../lib/categoryApi'
 import { listCompanies } from '../lib/companyApi'
 import { updateProblem } from '../lib/problemApi'
-import type { AnalysisResult, ProblemChatMessage } from '../types/analysis'
+import type { AnalysisResult } from '../types/analysis'
 import type { Company } from '../types/company'
 import type { ProblemCreatePayload, ProblemDetail, ProblemLatestStatus } from '../types/problem'
 import type { ProblemCategory } from '../types/problemCategory'
@@ -16,6 +16,7 @@ type ProblemOverviewPageProps = {
   onBack: () => void
   onStartTraining: () => void
   onProblemSaved: (problem: ProblemDetail) => void
+  onGoToChat: (problemId: number, problemTitle: string) => void
 }
 
 type ProblemEditForm = {
@@ -87,7 +88,7 @@ function normalizeLatestStatus(status: string): ProblemLatestStatus {
   return '未开始'
 }
 
-export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTraining, onProblemSaved }: ProblemOverviewPageProps) {
+export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTraining, onProblemSaved, onGoToChat }: ProblemOverviewPageProps) {
   const [form, setForm] = useState<ProblemEditForm>(() => buildEditForm(problem))
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
@@ -97,22 +98,34 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
   const [problemAnalysis, setProblemAnalysis] = useState<AnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [isAnalyzingProblem, setIsAnalyzingProblem] = useState(false)
-  const [chatMessages, setChatMessages] = useState<ProblemChatMessage[]>([])
-  const [chatQuestion, setChatQuestion] = useState('')
-  const [chatError, setChatError] = useState('')
-  const [isChatting, setIsChatting] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [hasLocalAnalysis, setHasLocalAnalysis] = useState(false)
+  const prevProblemIdRef = useRef(problem.id)
 
   useEffect(() => {
+    const problemChanged = prevProblemIdRef.current !== problem.id
+    prevProblemIdRef.current = problem.id
+
     setForm(buildEditForm(problem))
     setSaveError('')
     setSaveSuccess('')
-    setProblemAnalysis(null)
     setAnalysisError('')
-    setChatMessages([])
-    setChatQuestion('')
-    setChatError('')
-  }, [problem])
+
+    if (problemChanged) {
+      setHasLocalAnalysis(false)
+      if (problem.analysis_json) {
+        try {
+          setProblemAnalysis(JSON.parse(problem.analysis_json))
+          return
+        } catch { /* bad JSON, fall through */ }
+      }
+      setProblemAnalysis(null)
+    } else if (!hasLocalAnalysis && problem.analysis_json) {
+      try {
+        setProblemAnalysis(JSON.parse(problem.analysis_json))
+      } catch { /* ignore */ }
+    }
+  }, [problem.id, problem.analysis_json])
 
   useEffect(() => {
     void Promise.all([
@@ -160,6 +173,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
           sort_order: 1,
         },
       ],
+      analysis_json: problemAnalysis ? JSON.stringify(problemAnalysis) : (problem.analysis_json ?? null),
     }
   }
 
@@ -186,6 +200,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
     try {
       const result = await analyzeProblem({ problem_id: problem.id })
       setProblemAnalysis(result)
+      setHasLocalAnalysis(true)
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : '分析失败')
     } finally {
@@ -193,26 +208,8 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
     }
   }
 
-  const handleAskProblem = async () => {
-    const question = chatQuestion.trim()
-    if (!question) {
-      return
-    }
-
-    setIsChatting(true)
-    setChatError('')
-    setChatQuestion('')
-    const nextMessages: ProblemChatMessage[] = [...chatMessages, { role: 'user', content: question }]
-    setChatMessages(nextMessages)
-
-    try {
-      const result = await chatProblem({ problem_id: problem.id, messages: chatMessages, question })
-      setChatMessages([...nextMessages, { role: 'assistant', content: [result.summary, ...result.bullets].filter(Boolean).join('\n') }])
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : '问答失败')
-    } finally {
-      setIsChatting(false)
-    }
+  const handleGoToChat = () => {
+    onGoToChat(problem.id, problem.title)
   }
 
   return (
@@ -366,61 +363,31 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       <article className="detail-card">
         <div className="ai-card-header">
           <div>
-            <h2>AI 解题思路分析</h2>
+            <h2>AI 解题思路分析 <span className="agent-badge">solution-agent</span></h2>
             <p>{buildThinkingSummary(problem, categoryName)}</p>
           </div>
-          <button type="button" className="button primary" disabled={isAnalyzingProblem} onClick={() => void handleAnalyzeProblem()}>
-            {isAnalyzingProblem ? '分析中...' : problemAnalysis ? '重新分析' : '生成分析'}
-          </button>
+            <button type="button" className="button primary" disabled={isAnalyzingProblem} onClick={() => void handleAnalyzeProblem()}>
+              {isAnalyzingProblem ? '分析中...' : problemAnalysis ? '重新分析' : 'AI分析'}
+            </button>
         </div>
         {analysisError ? <div className="backend-note">题目分析失败：{analysisError}</div> : null}
         {problemAnalysis ? (
           <div className="diagnostic-list ai-analysis-block">
             <div className="diagnostic-item">
               <strong>{problemAnalysis.title}</strong>
-              <span>{problemAnalysis.summary}</span>
+              <MarkdownRenderer markdown={problemAnalysis.summary} />
             </div>
-            {problemAnalysis.bullets.map((item) => (
-              <div key={item} className="diagnostic-item">
-                <span>{item}</span>
-              </div>
-            ))}
           </div>
         ) : null}
 
         <div className="problem-chat-panel">
           <div className="ai-card-header">
             <div>
-              <h3>解题思路问答</h3>
-              <p>围绕题意、算法选择、复杂度证明和边界条件继续追问。</p>
+              <h3>AI 问答</h3>
+              <p>进入 AI 对话页面，围绕本题进行多轮追问和深入讨论。</p>
             </div>
-          </div>
-          <div className="problem-chat-thread">
-            {chatMessages.length === 0 ? (
-              <div className="empty-panel">可以提问：为什么用 DP？能否贪心？复杂度怎么证明？</div>
-            ) : (
-              chatMessages.map((message, index) => (
-                <div key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
-                  <strong>{message.role === 'user' ? '我' : 'AI 助教'}</strong>
-                  <p>{message.content}</p>
-                </div>
-              ))
-            )}
-          </div>
-          {chatError ? <div className="backend-note">问答失败：{chatError}</div> : null}
-          <div className="problem-chat-input-row">
-            <input
-              value={chatQuestion}
-              onChange={(event) => setChatQuestion(event.target.value)}
-              placeholder="继续追问这道题的解题思路"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  void handleAskProblem()
-                }
-              }}
-            />
-            <button type="button" className="button" disabled={isChatting || !chatQuestion.trim()} onClick={() => void handleAskProblem()}>
-              {isChatting ? '回答中...' : '发送'}
+            <button type="button" className="button primary" onClick={handleGoToChat}>
+              进入 AI 问答
             </button>
           </div>
         </div>

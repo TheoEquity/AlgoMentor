@@ -146,6 +146,105 @@ def initialize_database(database_url: str) -> None:
             )
         ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_agents (
+                id SERIAL PRIMARY KEY,
+                slug VARCHAR(64) UNIQUE NOT NULL,
+                name VARCHAR(128) NOT NULL,
+                description TEXT DEFAULT '',
+                icon VARCHAR(32) DEFAULT 'bot',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                user_prompt_template TEXT NOT NULL DEFAULT '',
+                model VARCHAR(128) NOT NULL DEFAULT 'gpt-4.1-mini',
+                temperature REAL NOT NULL DEFAULT 0.2,
+                max_tokens INTEGER NOT NULL DEFAULT 2048,
+                max_iterations INTEGER NOT NULL DEFAULT 10,
+                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_tools (
+                id SERIAL PRIMARY KEY,
+                slug VARCHAR(64) UNIQUE NOT NULL,
+                name VARCHAR(128) NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                parameters_schema JSONB NOT NULL DEFAULT '{}',
+                handler_type VARCHAR(32) NOT NULL DEFAULT 'python_function',
+                handler_config JSONB NOT NULL DEFAULT '{}',
+                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_skills (
+                id SERIAL PRIMARY KEY,
+                slug VARCHAR(64) UNIQUE NOT NULL,
+                name VARCHAR(128) NOT NULL,
+                description TEXT DEFAULT '',
+                prompt_text TEXT NOT NULL,
+                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_agent_tools (
+                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
+                tool_id INTEGER NOT NULL REFERENCES ai_tools(id),
+                PRIMARY KEY (agent_id, tool_id)
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_agent_skills (
+                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
+                skill_id INTEGER NOT NULL REFERENCES ai_skills(id),
+                PRIMARY KEY (agent_id, skill_id)
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+                id SERIAL PRIMARY KEY,
+                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
+                title VARCHAR(256) NOT NULL DEFAULT 'New Chat',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_chat_messages (
+                id SERIAL PRIMARY KEY,
+                session_id INTEGER NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+                role VARCHAR(32) NOT NULL,
+                content TEXT NOT NULL,
+                tool_calls JSONB,
+                tool_results JSONB,
+                token_usage JSONB,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_usage_logs (
+                id SERIAL PRIMARY KEY,
+                agent_slug VARCHAR(64) NOT NULL,
+                model VARCHAR(128) NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                tool_calls_count INTEGER NOT NULL DEFAULT 0,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
         cursor.execute('SELECT COUNT(*) AS count FROM users')
         if cursor.fetchone()['count'] == 0:
             cursor.execute(
@@ -163,6 +262,12 @@ def initialize_database(database_url: str) -> None:
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT '中'"
         )
         cursor.execute(
+            "ALTER TABLE ai_chat_sessions ADD COLUMN IF NOT EXISTS problem_id INTEGER REFERENCES problems(id)"
+        )
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS analysis_json TEXT"
+        )
+        cursor.execute(
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS year INTEGER"
         )
         cursor.execute(
@@ -177,6 +282,9 @@ def initialize_database(database_url: str) -> None:
         )
         cursor.execute(
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS memory_limit_kb INTEGER NOT NULL DEFAULT 262144"
+        )
+        cursor.execute(
+            "ALTER TABLE problems ADD COLUMN IF NOT EXISTS position VARCHAR(64) DEFAULT ''"
         )
 
         cursor.execute('SELECT COUNT(*) AS count FROM llm_settings')
@@ -209,6 +317,10 @@ def initialize_database(database_url: str) -> None:
         cursor.execute('SELECT COUNT(*) AS count FROM problem_categories')
         if cursor.fetchone()['count'] == 0:
             _seed_categories(cursor)
+
+        cursor.execute('SELECT COUNT(*) AS count FROM ai_agents')
+        if cursor.fetchone()['count'] == 0:
+            _seed_agents(cursor)
 
         cursor.execute('SELECT COUNT(*) AS count FROM problems')
         if cursor.fetchone()['count'] == 0:
@@ -302,3 +414,122 @@ def _seed_database(cursor) -> None:
                     test_case['sort_order'],
                 ),
             )
+
+
+def _seed_agents(cursor) -> None:
+    now = '2026-07-04T00:00:00Z'
+
+    _AGENTS = [
+        (1, 'solution-agent', '解题 Agent', '分析题目解题思路并给出标准答案代码',
+         '你是一位资深算法竞赛教练。分析题目时从题意拆解、关键观察、算法选择、复杂度、易错点五个维度展开。对于每道题务必给出标准答案参考代码（Python/C++/Java），代码不包含 main 入口和测试用例。',
+         '请分析这道算法题的解题思路，并给出标准答案代码。\n\n## 题目标题\n{{ problem.title }}\n\n## 题目标签\n{{ ", ".join(problem.tags) if problem.tags else "无" }}\n\n## 题面\n{{ problem.statement_markdown }}\n\n## 约束\n{{ problem.constraints_text }}\n\n{% if code_text %}\n## 用户代码\n```{{ language }}\n{{ code_text }}\n```\n{% endif %}',
+         'gpt-4.1-mini', 0.2, 2048, 10, 1),
+
+        (2, 'tutoring-agent', '答题 Agent', '在编程做题过程中提供分步辅导',
+         '你是一位耐心的编程导师。根据用户当前做题状态提供分步辅导：错误归因时准确定位代码行；复盘时总结薄弱点和改进方向；分步提示避免直接给完整答案；回答追问时聚焦题目思路和复杂度证明。',
+         '{% if analysis_type == "attribution" %}\n请对下面的判题结果做错误归因。primary_category 是主要错误类型，secondary_category 是次级错误类型，title 是短标题，summary 是一段总结，bullets 是 3 到 5 条建议，line_refs 是可选的行号提示。\n\n## 判题信息\n- Verdict: {{ submission.verdict }}\n- 运行时错误: {{ submission.stderr_output }}\n- 编译输出: {{ submission.compiler_output }}\n- 失败输入: {{ submission.failed_input }}\n- 预期输出: {{ submission.failed_expected_output }}\n- 实际输出: {{ submission.failed_actual_output }}\n\n## 代码\n```{{ language }}\n{{ code_text }}\n```\n{% elif analysis_type == "review" %}\n请基于下面的做题记录生成复盘建议。重点输出下次训练建议、薄弱点和继续训练动作。\n\n## 题目: {{ problem.title }}\n## Verdict: {{ submission.verdict }}\n## 运行时间: {{ submission.runtime_ms }}ms\n## 内存: {{ submission.memory_kb }}KB\n\n## 代码\n```{{ language }}\n{{ code_text }}\n```\n{% elif analysis_type == "hint" %}\n请为 ACM 编程训练生成渐进式提示。title 是本步提示标题，summary 是克制提示，bullets 是 2 到 4 条可执行提示，line_refs 可指出当前代码风险。避免直接给完整代码。\n\n提示步骤：第 {{ hint_step }} 步\n提示强度：{{ hint_strength }}\n\n## 题目标题: {{ problem.title }}\n## 标签: {{ ", ".join(problem.tags) }}\n## 题面: {{ problem.statement_markdown }}\n## 约束: {{ problem.constraints_text }}\n\n## 代码\n```{{ language }}\n{{ code_text }}\n```\n{% elif analysis_type == "chat" %}\n请作为算法题解题助教回答用户追问。聚焦题目思路、复杂度证明、反例、边界条件和同类题迁移。\n\n## 题目标题: {{ problem.title }}\n## 标签: {{ ", ".join(problem.tags) }}\n## 题面: {{ problem.statement_markdown }}\n## 约束: {{ problem.constraints_text }}\n\n{% if messages %}\n## 对话历史\n{% for msg in messages %}\n{{ msg.role }}: {{ msg.content }}\n{% endfor %}\n{% endif %}\n\n## 用户问题\n{{ question }}\n{% else %}\n请分析下面的算法题代码并给出解题建议。\n\n## 题目标题: {{ problem.title }}\n## 标签: {{ ", ".join(problem.tags) }}\n## 约束: {{ problem.constraints_text }}\n## 语言: {{ language }}\n\n## 代码\n```{{ language }}\n{{ code_text }}\n```\n{% endif %}',
+         'gpt-4.1-mini', 0.2, 2048, 10, 2),
+
+        (3, 'chat-agent', '聊天 Agent', '独立 AI 聊天界面，自由对话和数据分析',
+         '你是 AlgoMentor 平台的 AI 数据分析助手。支持自然语言查询题库统计、提交分析、公司趋势、个人进度等。用表格和图表描述数据，给出可操作的改进建议。回答时保持简洁专业，不超过 500 字。',
+         '{{ query }}',
+         'gpt-4.1-mini', 0.5, 2048, 10, 3),
+
+        (4, 'parsing-agent', '解析 Agent', '将非结构化题目文本/图片解析为结构化数据',
+         '你是算法题目结构化解析专家。将输入文本/图片解析为包含 slug/title/company/difficulty/category_slug/statement_markdown/tags/examples/time_limit_ms/memory_limit_kb/source/analysis 的完整 JSON 对象。数学公式统一用 $...$ 或 $$...$$ 包裹。无法识别的字段留空字符串。',
+         '{% if mode == "image_only" %}\n请识别图片中的算法题目，解析为结构化 JSON。优先恢复题面正文、输入输出格式、样例和公式。\n{% elif mode == "text_plus_image" %}\n以下文本和图片是同一道算法题，请以文本为主线，用图片校正数学公式和复杂排版，解析为结构化 JSON。\n\n## 文本内容\n{{ raw_text }}\n\n## 图片说明\n{{ image_name }}\n{% else %}\n请将以下算法题目文本解析为结构化 JSON。\n\n{{ raw_text }}\n{% endif %}',
+         'gpt-4.1-mini', 0.1, 4096, 5, 4),
+
+        (5, 'coach-agent', '教练 Agent', '分析训练历史，生成个性化学习计划',
+         '你是 AI 训练教练。分析用户提交历史识别薄弱题型和易错类别。生成 7 天训练计划，每天推荐 3-5 道针对弱项的题目。报告包含正确率趋势、耗时分布和知识点热力图描述。',
+         '请分析我的训练数据并生成个性化学习计划。\n\n{% if submission_history %}\n## 提交历史\n{{ submission_history }}\n{% endif %}',
+         'gpt-4.1-mini', 0.3, 2048, 10, 5),
+    ]
+    for agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort in _AGENTS:
+        cursor.execute(
+            '''INSERT INTO ai_agents (
+                id, slug, name, description, system_prompt, user_prompt_template,
+                model, temperature, max_tokens, max_iterations, sort_order, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+            (agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort, now, now),
+        )
+
+    _TOOLS = [
+        (1, 'query_problems', '搜索题库', '搜索题库，可按公司、题型、难度、关键词过滤',
+         '{"type":"object","properties":{"company":{"type":"string","description":"公司名"},"category":{"type":"string","description":"题型slug"},"difficulty":{"type":"string","enum":["Easy","Medium","Hard"]},"keyword":{"type":"string","description":"关键词搜索标题"},"limit":{"type":"integer","default":10}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"query_problems"}'),
+        (2, 'query_submissions', '查询提交记录', '查询用户的提交记录',
+         '{"type":"object","properties":{"problem_id":{"type":"integer"},"verdict":{"type":"string"},"limit":{"type":"integer","default":20}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"query_submissions"}'),
+        (3, 'read_user_code', '读取当前代码', '读取用户正在编辑的代码内容',
+         '{"type":"object","properties":{},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"read_user_code"}'),
+        (4, 'run_test_case', '运行测试用例', '在判题系统中运行一个测试用例',
+         '{"type":"object","properties":{"stdin":{"type":"string","description":"标准输入"}},"required":["stdin"]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"run_test_case"}'),
+        (5, 'compare_output', '对比输出差异', '对比预期输出和实际输出的差异',
+         '{"type":"object","properties":{"expected":{"type":"string"},"actual":{"type":"string"}},"required":["expected","actual"]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"compare_output"}'),
+        (6, 'analyze_company_trends', '公司出题趋势', '分析指定公司的出题趋势',
+         '{"type":"object","properties":{"company":{"type":"string"},"years":{"type":"integer","default":3}},"required":["company"]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"analyze_company_trends"}'),
+        (7, 'analyze_category_distribution', '题型分布统计', '统计题型分布情况',
+         '{"type":"object","properties":{"company":{"type":"string"},"difficulty":{"type":"string"}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"analyze_category_distribution"}'),
+        (8, 'generate_training_report', '生成训练报告', '生成用户训练报告',
+         '{"type":"object","properties":{"days":{"type":"integer","default":30}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"generate_training_report"}'),
+        (9, 'query_similar_problems', '查找相似题', '根据题目 ID 查找相似题目',
+         '{"type":"object","properties":{"problem_id":{"type":"integer"},"limit":{"type":"integer","default":5}},"required":["problem_id"]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"query_similar_problems"}'),
+        (10, 'analyze_user_weaknesses', '弱项分析', '分析用户的薄弱题型和知识点',
+         '{"type":"object","properties":{"days":{"type":"integer","default":30}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"analyze_user_weaknesses"}'),
+        (11, 'generate_study_plan', '学习计划', '生成个性化学习计划',
+         '{"type":"object","properties":{"target_areas":{"type":"string"},"days":{"type":"integer","default":7}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"generate_study_plan"}'),
+        (12, 'recommend_daily_problems', '每日推荐', '推荐今日练习题',
+         '{"type":"object","properties":{"count":{"type":"integer","default":5}},"required":[]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"recommend_daily_problems"}'),
+    ]
+    for tool_id, slug, name, desc, schema, htype, hconfig in _TOOLS:
+        cursor.execute(
+            '''INSERT INTO ai_tools (
+                id, slug, name, description, parameters_schema, handler_type, handler_config, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+            (tool_id, slug, name, desc, schema, htype, hconfig, now),
+        )
+
+    _SKILLS = [
+        (1, 'hint-skill', '渐进提示', '控制提示的输出克制程度，按步骤推进。禁止直接给出完整答案。'),
+        (2, 'attribution-skill', '错误归因', '根据判题结果定位错误类型和代码行。输出 primary_category 和 secondary_category。'),
+        (3, 'review-skill', '训练复盘', '基于提交记录分析薄弱点，生成下一步训练方向和具体改进步骤。'),
+    ]
+    for skill_id, slug, name, prompt in _SKILLS:
+        cursor.execute(
+            '''INSERT INTO ai_skills (
+                id, slug, name, description, prompt_text, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s)''',
+            (skill_id, slug, name, '', prompt, now),
+        )
+
+    _AGENT_TOOLS = [
+        (1, 9),   # solution-agent -> query_similar_problems
+        (2, 3), (2, 4), (2, 5), (2, 9),  # tutoring-agent -> read_user_code, run_test_case, compare_output, query_similar_problems
+        (3, 1), (3, 2), (3, 6), (3, 7), (3, 8),  # chat-agent -> query_problems, query_submissions, analyze_company_trends, analyze_category_distribution, generate_training_report
+        (5, 10), (5, 11), (5, 12), (5, 1),  # coach-agent -> analyze_user_weaknesses, generate_study_plan, recommend_daily_problems, query_problems
+    ]
+    for agent_id, tool_id in _AGENT_TOOLS:
+        cursor.execute(
+            'INSERT INTO ai_agent_tools (agent_id, tool_id) VALUES (%s, %s)',
+            (agent_id, tool_id),
+        )
+
+    _AGENT_SKILLS = [
+        (2, 1), (2, 2), (2, 3),  # tutoring-agent -> hint, attribution, review
+    ]
+    for agent_id, skill_id in _AGENT_SKILLS:
+        cursor.execute(
+            'INSERT INTO ai_agent_skills (agent_id, skill_id) VALUES (%s, %s)',
+            (agent_id, skill_id),
+        )

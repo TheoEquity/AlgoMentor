@@ -13,6 +13,7 @@ import { ProblemOverviewPage } from './pages/ProblemOverviewPage'
 import { ReviewCenterPage } from './pages/ReviewCenterPage'
 import { SystemSettingsPage } from './pages/SystemSettingsPage'
 import { TrainingCenterPage } from './pages/TrainingCenterPage'
+import { ChatPage } from './pages/ChatPage'
 import type { ProblemDetail } from './types/problem'
 import type { ProblemCategory } from './types/problemCategory'
 
@@ -22,10 +23,12 @@ type AppRouteState = {
   activeNav: NavigationKey
   selectedProblemId: number | null
   problemMode: ProblemMode
+  chatProblemId: number | null
 }
 
 function readRouteFromLocation(): AppRouteState {
   const pathname = window.location.pathname
+  const searchParams = new URLSearchParams(window.location.search)
   const problemMatch = pathname.match(/^\/problems\/(\d+)(?:\/(training))?$/)
 
   if (problemMatch) {
@@ -33,22 +36,33 @@ function readRouteFromLocation(): AppRouteState {
       activeNav: 'library',
       selectedProblemId: Number(problemMatch[1]),
       problemMode: problemMatch[2] === 'training' ? 'training' : 'overview',
+      chatProblemId: null,
+    }
+  }
+
+  const chatProblemId = searchParams.get('problem_id')
+  if (pathname === '/chat') {
+    return {
+      activeNav: 'chat',
+      selectedProblemId: null,
+      problemMode: 'overview',
+      chatProblemId: chatProblemId ? Number(chatProblemId) : null,
     }
   }
 
   if (pathname === '/training') {
-    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview' }
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
   }
 
   if (pathname === '/review') {
-    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview' }
+    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
   }
 
   if (pathname === '/system') {
-    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview' }
+    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
   }
 
-  return { activeNav: 'library', selectedProblemId: null, problemMode: 'overview' }
+  return { activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
 }
 
 function buildRoutePath(route: AppRouteState): string {
@@ -56,6 +70,10 @@ function buildRoutePath(route: AppRouteState): string {
     return route.problemMode === 'training'
       ? `/problems/${route.selectedProblemId}/training`
       : `/problems/${route.selectedProblemId}`
+  }
+
+  if (route.activeNav === 'chat' && route.chatProblemId !== null) {
+    return `/chat?problem_id=${route.chatProblemId}`
   }
 
   return route.activeNav === 'library' ? '/library' : `/${route.activeNav}`
@@ -73,6 +91,7 @@ function App() {
   const [createPageOpen, setCreatePageOpen] = useState(false)
   const [hintsRefreshSeed, setHintsRefreshSeed] = useState(0)
   const [sidebarHints, setSidebarHints] = useState<Partial<Record<NavigationKey, string>>>({})
+  const [chatProblemId, setChatProblemId] = useState<number | null>(initialRoute.chatProblemId)
 
   useEffect(() => {
     if (createPageOpen) {
@@ -84,6 +103,7 @@ function App() {
       training: '训练 - AlgoMentor',
       review: '复盘 - AlgoMentor',
       system: '系统管理 - AlgoMentor',
+      chat: 'AI 对话 - AlgoMentor',
     }
     document.title = titles[activeNav]
   }, [activeNav, createPageOpen])
@@ -156,6 +176,7 @@ function App() {
     setActiveNav(route.activeNav)
     setSelectedProblemId(route.selectedProblemId)
     setProblemMode(route.problemMode)
+    setChatProblemId(route.chatProblemId)
     setProblemReloadSeed(0)
   }
 
@@ -165,7 +186,7 @@ function App() {
   }
 
   const handleNavigate = (next: NavigationKey) => {
-    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview' })
+    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview', chatProblemId: null })
   }
 
   return (
@@ -197,9 +218,12 @@ function App() {
         <ProblemOverviewPage
           problem={selectedProblem}
           categoryName={categoryNameBySlug.get(selectedProblem.category_slug) || ''}
-          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })}
-          onStartTraining={() => navigateTo({ activeNav: 'library', selectedProblemId: selectedProblem.id, problemMode: 'training' })}
+          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null })}
+          onStartTraining={() => navigateTo({ activeNav: 'library', selectedProblemId: selectedProblem.id, problemMode: 'training', chatProblemId: null })}
           onProblemSaved={setSelectedProblem}
+          onGoToChat={(problemId) => {
+            navigateTo({ activeNav: 'chat', selectedProblemId: null, problemMode: 'overview', chatProblemId: problemId })
+          }}
         />
       ) : isWorkspace && selectedProblem ? (
         <ProblemDetailPage problem={selectedProblem} onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })} />
@@ -212,6 +236,8 @@ function App() {
         </div>
       ) : activeNav === 'system' ? (
         <SystemSettingsPage />
+      ) : activeNav === 'chat' ? (
+        <ChatPage problemId={chatProblemId} />
       ) : activeNav === 'training' ? (
         <TrainingCenterPage
           onOpenProblem={(problemId) => {

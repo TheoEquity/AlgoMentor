@@ -1136,7 +1136,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
             <div className="workbench-section hint-section">
               <div className="result-status-card">
                 <div>
-                  <strong>渐进式提示</strong>
+                  <strong>渐进式提示 <span className="agent-badge">tutoring-agent</span></strong>
                   <div className="analysis-meta-text">按做题过程逐步释放线索，优先保留独立思考空间。</div>
                 </div>
                 <button type="button" className="button primary" disabled={isHinting} onClick={() => void requestNextHint()}>
@@ -1174,7 +1174,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                   {hints.map((item, index) => (
                     <div key={`${item.title}-${index}`} className="diagnostic-item">
                       <strong>{item.title}</strong>
-                      <span>{item.summary}</span>
+                      <MarkdownRenderer markdown={item.summary} />
                       {item.bullets.length > 0 ? (
                         <ul className="review-bullet-list">
                           {item.bullets.map((bullet) => (
@@ -1193,7 +1193,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
             <div className="workbench-section explain-section">
               <div className="result-status-card">
                 <div>
-                  <strong>{analysis?.title ?? 'AI 分析'}</strong>
+                  <strong>{analysis?.title ?? 'AI 分析'} <span className="agent-badge">tutoring-agent</span></strong>
                   <div className="analysis-meta-text">
                     {analysis ? `${analysis.provider} / ${analysis.model}` : '尚未触发分析'}
                   </div>
@@ -1261,17 +1261,14 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                       </span>
                     ))}
                   </div>
-                  {analysisPreview.summary ? <p className="streaming-summary">{analysisPreview.summary}</p> : null}
-                  {analysisStreamMeta?.status_reason ? <div className="backend-note">当前状态说明：{analysisStreamMeta.status_reason}</div> : null}
-                  {analysisPreview.bullets.length > 0 ? (
+                  {analysisPreview.summary ? (
                     <div className="diagnostic-list">
-                      {analysisPreview.bullets.map((item) => (
-                        <div key={item} className="diagnostic-item">
-                          <span>{item}</span>
-                        </div>
-                      ))}
+                      <div className="diagnostic-item">
+                        <MarkdownRenderer markdown={analysisPreview.summary} />
+                      </div>
                     </div>
                   ) : null}
+                  {analysisStreamMeta?.status_reason ? <div className="backend-note">当前状态说明：{analysisStreamMeta.status_reason}</div> : null}
                   {analysisPreview.lineRefs.length > 0 ? (
                     <div className="diagnostic-list">
                       {analysisPreview.lineRefs.map((item) => (
@@ -1292,24 +1289,13 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
               ) : null}
 
               {analysis ? (
-                <>
-                  <p>{analysis.summary}</p>
-                  <div className="diagnostic-list">
-                    {analysis.bullets.map((item) => (
-                      <div key={item} className="diagnostic-item">
-                        <span>{item}</span>
-                      </div>
-                    ))}
+                <div className="diagnostic-list">
+                  <div className="diagnostic-item">
+                    <MarkdownRenderer markdown={analysis.summary} />
                   </div>
-                  <div className="analysis-meta-block">
-                    <strong>Endpoint</strong>
-                    <code>{analysis.endpoint_url}</code>
-                  </div>
-                  {analysis.status_reason ? <div className="backend-note">状态说明：{analysis.status_reason}</div> : null}
-                </>
-              ) : (
-                <p>当前还没有分析结果，可以直接分析当前代码，或在 Run / Submit 后查看归因结果。</p>
-              )}
+                </div>
+              ) : null}
+              {analysis?.status_reason ? <div className="backend-note">状态说明：{analysis.status_reason}</div> : null}
 
               <div className="diagnostic-list">
                 {diagnostics.map((item) => (
@@ -1326,7 +1312,7 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
             <div className="workbench-section review-section">
               <div className="result-status-card">
                 <div>
-                  <strong>{reviewAnalysis?.title ?? '训练复盘'}</strong>
+                  <strong>{reviewAnalysis?.title ?? '训练复盘'} <span className="agent-badge">tutoring-agent</span></strong>
                   <div className="analysis-meta-text">
                     {reviewAnalysis ? `${reviewAnalysis.provider} / ${reviewAnalysis.model}` : '尚未触发复盘'}
                   </div>
@@ -1398,17 +1384,14 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
                       </span>
                     ))}
                   </div>
-                  {reviewPreview.summary ? <p className="streaming-summary">{reviewPreview.summary}</p> : null}
-                  {reviewStreamMeta?.status_reason ? <div className="backend-note">当前状态说明：{reviewStreamMeta.status_reason}</div> : null}
-                  {reviewPreview.bullets.length > 0 ? (
+                  {reviewPreview.summary ? (
                     <div className="diagnostic-list">
-                      {reviewPreview.bullets.map((item) => (
-                        <div key={item} className="diagnostic-item">
-                          <span>{item}</span>
-                        </div>
-                      ))}
+                      <div className="diagnostic-item">
+                        <MarkdownRenderer markdown={reviewPreview.summary} />
+                      </div>
                     </div>
                   ) : null}
+                  {reviewStreamMeta?.status_reason ? <div className="backend-note">当前状态说明：{reviewStreamMeta.status_reason}</div> : null}
                   {reviewPreview.lineRefs.length > 0 ? (
                     <div className="diagnostic-list">
                       {reviewPreview.lineRefs.map((item) => (
@@ -1429,17 +1412,11 @@ export function ProblemDetailPage({ problem, onBack }: ProblemDetailPageProps) {
               ) : null}
 
               {reviewAnalysis ? (
-                <>
-                  <p>{reviewAnalysis.summary}</p>
-                  <div className="diagnostic-list">
-                    {reviewAnalysis.bullets.map((item) => (
-                      <div key={item} className="diagnostic-item">
-                        <span>{item}</span>
-                      </div>
-                    ))}
+                <div className="diagnostic-list">
+                  <div className="diagnostic-item">
+                    <MarkdownRenderer markdown={reviewAnalysis.summary} />
                   </div>
-                  {reviewAnalysis.status_reason ? <div className="backend-note">状态说明：{reviewAnalysis.status_reason}</div> : null}
-                </>
+                </div>
               ) : (
                 <>
                   <p>最近一次结果会优先进入这里，形成 Submit 之后立即复盘的链路。</p>
