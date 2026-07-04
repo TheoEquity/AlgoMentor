@@ -225,6 +225,7 @@ INSERT INTO public.problem_categories (id, name, slug, sort_order, created_at) V
 INSERT INTO public.problem_categories (id, name, slug, sort_order, created_at) VALUES (17, 'Bit Manipulation', 'bit-manipulation', 17, '2026-06-24T00:00:00Z');
 INSERT INTO public.problem_categories (id, name, slug, sort_order, created_at) VALUES (18, 'Simulation', 'simulation', 18, '2026-06-24T00:00:00Z');
 INSERT INTO public.problem_categories (id, name, slug, sort_order, created_at) VALUES (19, '数学', 'math', 20, '2026-06-26 10:00:00+00');
+INSERT INTO public.problem_categories (id, name, slug, sort_order, created_at) VALUES (20, 'String', 'string', 21, '2026-07-03 10:00:00+00');
 
 
 --
@@ -260,7 +261,7 @@ SELECT pg_catalog.setval('public.error_attributions_id_seq', 1, true);
 -- Name: problem_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.problem_categories_id_seq', 19, true);
+SELECT pg_catalog.setval('public.problem_categories_id_seq', 20, true);
 
 
 --

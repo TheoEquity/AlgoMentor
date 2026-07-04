@@ -1420,6 +1420,7 @@ class AnalysisService:
             'dynamic-programming': ['动态规划', 'dp', '最优子结构', '状态转移', '记搜', '记忆化'],
             'greedy': ['贪心', '贪心算法', '最优策略'],
             'bit-manipulation': ['位运算', '异或', '按位', '二进制'],
+            'string': ['字符串', '字符', '子串', '回文串', '模式匹配'],
             'simulation': ['模拟', '构造', '实现'],
         }
         max_score = 0
@@ -1562,6 +1563,7 @@ class AnalysisService:
             'dynamic-programming': ['动态规划', 'dp', '最优子结构', '状态转移', '记搜', '记忆化'],
             'greedy': ['贪心', '贪心算法', '最优策略'],
             'bit-manipulation': ['位运算', '异或', '按位', '二进制'],
+            'string': ['字符串', '字符', '子串', '回文串', '模式匹配'],
             'simulation': ['模拟', '构造', '实现'],
         }
         category = 'simulation'
@@ -1601,7 +1603,7 @@ class AnalysisService:
             '2. title 保留原标题。\n'
             '3. company 从上下文中识别公司名（如华为、字节跳动、腾讯、阿里巴巴等），无法识别则为空字符串。\n'
             '4. difficulty 必须是 Easy / Medium / Hard 之一。\n'
-            '5. category_slug 必须从以下列表中选最匹配的：two-pointers, sliding-window, hashing, binary-search, prefix-sum, intervals, matrix-grid, linked-list, stack-queue, monotonic-stack, heap-priority-queue, tree, graphs, backtracking, dynamic-programming, greedy, bit-manipulation, simulation。\n'
+             '5. category_slug 必须从以下列表中选最匹配的：two-pointers, sliding-window, hashing, binary-search, prefix-sum, intervals, matrix-grid, linked-list, stack-queue, monotonic-stack, heap-priority-queue, tree, graphs, backtracking, dynamic-programming, greedy, bit-manipulation, string, simulation。\n'
             '6. statement_markdown 必须严格按照下面格式逐字生成，段落间保留空行，样例输入输出必须用代码块包裹：\n'
             '\n'
             '## 题目描述\n\n'
@@ -1726,7 +1728,7 @@ class AnalysisService:
             'prefix-sum', 'intervals', 'matrix-grid', 'linked-list',
             'stack-queue', 'monotonic-stack', 'heap-priority-queue',
             'tree', 'graphs', 'backtracking', 'dynamic-programming',
-            'greedy', 'bit-manipulation', 'simulation',
+            'greedy', 'bit-manipulation', 'string', 'simulation',
         }
         category = str(payload.get('category_slug', 'simulation')).strip()
         if category not in valid_categories:

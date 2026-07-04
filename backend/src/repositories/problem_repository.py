@@ -326,3 +326,19 @@ class ProblemRepository:
             expected_output_text=row['expected_output_text'],
             sort_order=row['sort_order'],
         )
+
+    def distinct_companies(self) -> list[str]:
+        connection = get_connection(self.database_url)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT company FROM problems WHERE company IS NOT NULL AND company != '' ORDER BY company")
+            rows = cursor.fetchall()
+        connection.close()
+        return [row['company'] for row in rows]
+
+    def distinct_positions(self) -> list[str]:
+        connection = get_connection(self.database_url)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT position FROM problems WHERE position IS NOT NULL AND position != '' ORDER BY position")
+            rows = cursor.fetchall()
+        connection.close()
+        return [row['position'] for row in rows]

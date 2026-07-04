@@ -465,32 +465,133 @@ def _build_offline_description_html(body_html: str, input_html: str, output_html
 def _extract_offline_problem_candidates(raw_content: str, source_url: str) -> list[OfflineProblemCandidate]:
     document_html = _extract_html_document(raw_content)
     resolved_source_url = source_url.strip() or _extract_snapshot_source_url(raw_content)
+
+    # Try old format first (paper-question blocks with data-question-index)
     coding_blocks = _extract_coding_blocks(document_html)
+    if coding_blocks:
+        candidates: list[OfflineProblemCandidate] = []
+        for block in coding_blocks:
+            title = _extract_title(block)
+            body_html = _extract_body_html(block)
+            input_html = _extract_preceding_section(block, '输入描述：')
+            output_html = _extract_preceding_section(block, '输出描述：')
+            description_html = _build_offline_description_html(body_html, input_html, output_html)
+            description_text = _strip_html_to_text(description_html)
+            samples = _extract_samples(block)
 
-    candidates: list[OfflineProblemCandidate] = []
-    for block in coding_blocks:
-        title = _extract_title(block)
-        body_html = _extract_body_html(block)
-        input_html = _extract_preceding_section(block, '输入描述：')
-        output_html = _extract_preceding_section(block, '输出描述：')
-        description_html = _build_offline_description_html(body_html, input_html, output_html)
-        description_text = _strip_html_to_text(description_html)
-        samples = _extract_samples(block)
+            if not title or not description_html:
+                continue
 
-        if not title or not description_html:
-            continue
-
-        candidates.append(
-            OfflineProblemCandidate(
-                title=title,
-                description_html=description_html,
-                description_text=description_text,
-                source_url=resolved_source_url,
-                samples=samples,
+            candidates.append(
+                OfflineProblemCandidate(
+                    title=title,
+                    description_html=description_html,
+                    description_text=description_text,
+                    source_url=resolved_source_url,
+                    samples=samples,
+                )
             )
-        )
+        return candidates
 
-    return candidates
+    # Try new format (single problem, left-right layout, .question-oi class)
+    candidate = _extract_v2_candidate(document_html, resolved_source_url)
+    if candidate:
+        return [candidate]
+
+    return []
+
+
+def _extract_v2_candidate(document_html: str, source_url: str) -> OfflineProblemCandidate | None:
+    import re as _re
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return None
+
+    soup = BeautifulSoup(document_html, 'html.parser')
+
+    body_text = soup.get_text()
+
+    title = ''
+    title_match = _re.search(r'BM\d+\s+(\S+)', body_text)
+    if title_match:
+        title = title_match.group(1)
+    if not title:
+        title_tag = soup.select_one('title')
+        if title_tag:
+            title = title_tag.get_text(strip=True).split('_')[0].strip()
+
+    # Use .describe-table for rich description (has images, KaTeX, proper structure)
+    desc_el = soup.select_one('.describe-table') or soup.select_one('.section-content.describe-table')
+    description_html = ''
+    if desc_el:
+        description_html = desc_el.decode_contents().strip()
+    else:
+        # Fallback: hidden div
+        hidden_div = None
+        for div in soup.select('div'):
+            style = div.get('style', '')
+            if 'top:-1000000px' in style:
+                hidden_div = div
+                break
+        if hidden_div:
+            parts = []
+            for child in hidden_div.children:
+                if isinstance(child, Tag) and 'question-oi' in child.get('class', []):
+                    break
+                txt = str(child).strip()
+                if txt:
+                    parts.append(txt)
+            description_html = '\n'.join(parts)
+
+    description_text = _strip_html_to_text(description_html) if description_html else ''
+
+    # Extract samples from hidden div (.question-oi blocks)
+    samples: list[dict[str, str]] = []
+    for sample in soup.select('.question-oi'):
+        inp = ''
+        out = ''
+        explain = ''
+        for mod in sample.select('.question-oi-mod'):
+            h2 = mod.select_one('h2')
+            cont = mod.select_one('.question-oi-cont')
+            if h2 and cont:
+                label = h2.get_text(strip=True)
+                val = cont.get_text(strip=True)
+                if '输入' in label:
+                    inp = val
+                elif '输出' in label:
+                    out = val
+                elif '说明' in label or '解释' in label:
+                    explain = val
+
+        pres = sample.select('pre')
+        if not inp and not out and len(pres) >= 2:
+            inp = pres[0].get_text(strip=True)
+            out = pres[1].get_text(strip=True)
+            if len(pres) >= 3:
+                explain = pres[2].get_text(strip=True)
+
+        if inp or out:
+            samples.append({'input': inp, 'output': out, 'explanation': explain})
+
+    if not title or not description_html:
+        return None
+
+    # Carry difficulty hint from page into description so detect_metadata can use it
+    diff_hint = ''
+    diff_match = _re.search(r'(简单|中等|困难)\s+通过率', body_text)
+    if diff_match:
+        diff_hint = f'\n\n难度提示：{diff_match.group(1)}\n'
+
+    full_html = f'{description_html}{diff_hint}'
+    return OfflineProblemCandidate(
+        title=title,
+        description_html=full_html,
+        description_text=_strip_html_to_text(full_html),
+        source_url=source_url,
+        samples=samples,
+    )
 
 
 def _build_import_raw_text(title: str, description_text: str, samples: list[dict[str, str]]) -> str:
@@ -735,6 +836,20 @@ async def list_problems(
         page_size=page_size,
     )
     return PaginatedProblemsResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get('/distinct-companies', response_model=list[str])
+async def distinct_companies(
+    repository: ProblemRepository = Depends(get_repository),
+) -> list[str]:
+    return repository.distinct_companies()
+
+
+@router.get('/distinct-positions', response_model=list[str])
+async def distinct_positions(
+    repository: ProblemRepository = Depends(get_repository),
+) -> list[str]:
+    return repository.distinct_positions()
 
 
 @router.post('/import', response_model=ProblemDetail, status_code=status.HTTP_201_CREATED)

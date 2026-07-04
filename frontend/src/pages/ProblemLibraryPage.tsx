@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { createProblem, deleteProblem, listProblems } from '../lib/problemApi'
+import { createProblem, deleteProblem, fetchDistinctCompanies, fetchDistinctPositions, listProblems } from '../lib/problemApi'
 import { listCategories } from '../lib/categoryApi'
 import { listCompanies } from '../lib/companyApi'
 import type { ProblemCategory } from '../types/problemCategory'
@@ -20,6 +20,8 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
   const pageSize = 15
   const [companies, setCompanies] = useState<Company[]>([])
   const [categories, setCategories] = useState<ProblemCategory[]>([])
+  const [distinctCompanies, setDistinctCompanies] = useState<string[]>([])
+  const [distinctPositions, setDistinctPositions] = useState<string[]>([])
   const [searchText, setSearchText] = useState('')
   const [company, setCompany] = useState('all')
   const [categorySlug, setCategorySlug] = useState('all')
@@ -58,6 +60,8 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     void Promise.all([
       listCompanies().then(setCompanies).catch(() => {}),
       listCategories().then(setCategories).catch(() => {}),
+      fetchDistinctCompanies().then(setDistinctCompanies).catch(() => {}),
+      fetchDistinctPositions().then(setDistinctPositions).catch(() => {}),
     ])
   }, [])
 
@@ -101,13 +105,9 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     return () => { cancelled = true }
   }, [currentPage, searchText, company, categorySlug, difficulty, positionFilter])
 
-  const positionNames = useMemo(() => {
-    return Array.from(new Set(problems.map((p) => p.position).filter(Boolean)))
-  }, [problems])
+  const positionNames = useMemo(() => distinctPositions, [distinctPositions])
 
-  const companyNames = useMemo(() => {
-    return Array.from(new Set(problems.map((p) => p.company)))
-  }, [problems])
+  const companyNames = useMemo(() => distinctCompanies, [distinctCompanies])
 
   const handleCreateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({

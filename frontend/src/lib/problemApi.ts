@@ -86,3 +86,19 @@ export async function deleteProblem(problemId: number): Promise<void> {
     throw new Error(`删除失败，状态码 ${response.status}`)
   }
 }
+
+export async function fetchDistinctCompanies(): Promise<string[]> {
+  try {
+    return await requestJSON<string[]>('/problems/distinct-companies')
+  } catch {
+    return []
+  }
+}
+
+export async function fetchDistinctPositions(): Promise<string[]> {
+  try {
+    return await requestJSON<string[]>('/problems/distinct-positions')
+  } catch {
+    return []
+  }
+}
