@@ -517,6 +517,65 @@ a {
 .table-footer-actions {
   display: flex;
   gap: var(--space-2);
+  align-items: center;
+}
+
+.pagination-page {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pagination-page:hover {
+  background: var(--accent-light, #e8f0fe);
+}
+
+.pagination-page.active {
+  background: var(--accent, #1a73e8);
+  color: #fff;
+  border-color: var(--accent, #1a73e8);
+}
+
+.pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pagination-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-left: var(--space-2);
+  white-space: nowrap;
+}
+
+.jump-input {
+  width: 48px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 13px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
 }
 
 .backend-note {

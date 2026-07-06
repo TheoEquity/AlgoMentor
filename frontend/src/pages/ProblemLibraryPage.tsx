@@ -18,6 +18,41 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
   const [currentPage, setCurrentPage] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const pageSize = 15
+  const [jumpValue, setJumpValue] = useState('')
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const buildPageNumbers = (): (number | 'ellipsis')[] => {
+    const pages: (number | 'ellipsis')[] = []
+    const tp = totalPages
+    if (tp <= 7) {
+      for (let i = 1; i <= tp; i++) pages.push(i)
+      return pages
+    }
+    if (currentPage <= 3) {
+      for (let i = 1; i <= 5; i++) pages.push(i)
+      pages.push('ellipsis')
+      pages.push(tp)
+    } else if (currentPage >= tp - 2) {
+      pages.push(1)
+      pages.push('ellipsis')
+      for (let i = tp - 4; i <= tp; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      pages.push('ellipsis')
+      for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i)
+      pages.push('ellipsis')
+      pages.push(tp)
+    }
+    return pages
+  }
+
+  const handleJump = () => {
+    const n = parseInt(jumpValue, 10)
+    if (n >= 1 && n <= totalPages) {
+      setCurrentPage(n)
+    }
+    setJumpValue('')
+  }
   const [companies, setCompanies] = useState<Company[]>([])
   const [categories, setCategories] = useState<ProblemCategory[]>([])
   const [distinctCompanies, setDistinctCompanies] = useState<string[]>([])
@@ -402,6 +437,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
               <select value={form.source} onChange={(event) => handleCreateField('source', event.target.value)}>
                 <option value="牛客">牛客</option>
                 <option value="Leetcode">Leetcode</option>
+                <option value="SSPoffer">SSPoffer</option>
                 <option value="手工">手工</option>
                 <option value="AI派生">AI派生</option>
               </select>
@@ -538,14 +574,41 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
             >
               上一页
             </button>
+            {buildPageNumbers().map((item, idx) =>
+              item === 'ellipsis' ? (
+                <span key={`e${idx}`} className="pagination-ellipsis">...</span>
+              ) : (
+                <button
+                  key={item}
+                  type="button"
+                  className={`pagination-page${item === currentPage ? ' active' : ''}`}
+                  onClick={() => setCurrentPage(item)}
+                >
+                  {item}
+                </button>
+              )
+            )}
             <button
               type="button"
               className="button"
-              disabled={currentPage * pageSize >= totalCount}
+              disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((p) => p + 1)}
             >
               下一页
             </button>
+            <span className="pagination-jump">
+              跳至
+              <input
+                type="text"
+                className="jump-input"
+                value={jumpValue}
+                onChange={(e) => setJumpValue(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleJump() }}
+                placeholder="页"
+              />
+              页
+              <button type="button" className="button ghost" onClick={handleJump}>GO</button>
+            </span>
           </div>
         </div>
       </div>

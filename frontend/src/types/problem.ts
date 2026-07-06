@@ -85,6 +85,9 @@ export type ProblemImportPayload = {
   description_text?: string
   source_url?: string
   samples: ProblemImportSample[]
+  difficulty?: string | null
+  time_limit_ms?: number | null
+  memory_limit_kb?: number | null
 }
 
 export type OfflineProblemExtractPayload = {
@@ -99,6 +102,9 @@ export type OfflineProblemCandidate = {
   description_text: string
   source_url: string
   samples: ProblemImportSample[]
+  difficulty?: string | null
+  time_limit_ms?: number | null
+  memory_limit_kb?: number | null
 }
 
 export type ProblemBatchImportPayload = {

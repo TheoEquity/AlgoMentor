@@ -10,7 +10,7 @@ import type { ParseProblemPayload, ParsedProblemResult } from '../types/analysis
 import type { OfflineProblemCandidate, ProblemCreatePayload, ProblemImportPayload, ProblemBatchImportPayload, ProblemLatestStatus } from '../types/problem'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
 
-type CreateTab = 'paste' | 'image' | 'niuke'
+type CreateTab = 'paste' | 'image' | 'niuke' | 'ssp'
 
 type OfflineCandidateWithFile = OfflineProblemCandidate & { _fileName: string }
 
@@ -362,12 +362,15 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
       const c = offlineCandidates[idx]
       if (c) {
         problems.push({
-          source: 'niuke_offline',
+          source: activeTab === 'ssp' ? 'ssp_offline' : 'niuke_offline',
           title: c.title,
           description_html: c.description_html,
           description_text: c.description_text,
           source_url: c.source_url,
           samples: c.samples,
+          difficulty: c.difficulty,
+          time_limit_ms: c.time_limit_ms,
+          memory_limit_kb: c.memory_limit_kb,
         })
         indices.push(idx)
       }
@@ -439,6 +442,13 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
           onClick={() => setActiveTab('niuke')}
         >
           牛客导入
+        </button>
+        <button
+          type="button"
+          className={`workspace-tab${activeTab === 'ssp' ? ' active' : ''}`}
+          onClick={() => setActiveTab('ssp')}
+        >
+          SSP导入
         </button>
       </div>
 
@@ -519,9 +529,11 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
       ) : (
         <div className="detail-card">
           <div className="detail-card" style={{ marginTop: 'var(--space-4)' }}>
-            <h2>离线 html / mhtml 导入</h2>
+            <h2>{activeTab === 'ssp' ? 'SSP offer 离线导入' : '牛客离线 html / mhtml 导入'}</h2>
             <p className="backend-note" style={{ marginBottom: 'var(--space-3)' }}>
-              支持直接读取牛客导出的一个或多个 <code>.html</code> / <code>.mhtml</code> 文件，优先抽取整卷中的编程题，再按题逐个导入。
+              {activeTab === 'ssp'
+                ? '支持直接读取 sspoffer / neituiya 导出的 .mhtml 文件，自动识别题目并导入。'
+                : '支持直接读取牛客导出的一个或多个 .html / .mhtml 文件，优先抽取整卷中的编程题，再按题逐个导入。'}
             </p>
             <label className="settings-field settings-field-full" style={{ marginBottom: 'var(--space-3)' }}>
               <span>离线文件</span>
@@ -686,6 +698,7 @@ export function ProblemCreatePage({ onBack, onProblemCreated }: Props) {
                   <select value={form.source} onChange={(event) => updateForm('source', event.target.value)}>
                     <option value="牛客">牛客</option>
                     <option value="Leetcode">Leetcode</option>
+                    <option value="SSPoffer">SSPoffer</option>
                     <option value="手工">手工</option>
                     <option value="AI派生">AI派生</option>
                   </select>

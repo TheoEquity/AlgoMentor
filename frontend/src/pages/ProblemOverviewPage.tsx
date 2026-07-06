@@ -308,6 +308,7 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
               <select value={form.source} onChange={(event) => handleFieldChange('source', event.target.value)}>
                 <option value="牛客">牛客</option>
                 <option value="Leetcode">Leetcode</option>
+                <option value="SSPoffer">SSPoffer</option>
                 <option value="手工">手工</option>
                 <option value="AI派生">AI派生</option>
               </select>

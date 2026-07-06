@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from config import Settings
+from core.db import get_connection
 from repositories.company_repository import CompanyRepository
 from repositories.llm_settings_repository import LLMSettingsRepository
 from repositories.problem_category_repository import ProblemCategoryRepository
@@ -120,6 +121,49 @@ async def delete_category(
 def _usage_repo() -> UsageRepository:
     settings = Settings()
     return UsageRepository(settings.database_url)
+
+
+@router.get('/dashboard')
+async def get_dashboard() -> dict:
+    settings = Settings()
+    connection = get_connection(settings.database_url)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("""SELECT company, COUNT(*) AS cnt FROM problems
+                           WHERE company IS NOT NULL AND company != ''
+                           GROUP BY company ORDER BY cnt DESC""")
+            company_distribution = [{'name': r['company'], 'count': r['cnt']} for r in cur.fetchall()]
+
+            cur.execute("""SELECT difficulty, COUNT(*) AS cnt FROM problems
+                           GROUP BY difficulty ORDER BY difficulty""")
+            difficulty_distribution = [{'name': r['difficulty'], 'count': r['cnt']} for r in cur.fetchall()]
+
+            cur.execute("""SELECT c.slug, c.name, c.sort_order, COUNT(p.id) AS cnt
+                           FROM problem_categories c
+                           LEFT JOIN problems p ON p.category_slug = c.slug
+                           GROUP BY c.slug, c.name, c.sort_order
+                           ORDER BY c.sort_order""")
+            category_distribution = [
+                {'slug': r['slug'], 'name': r['name'], 'count': r['cnt']}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute("""SELECT p.difficulty, COUNT(*) AS cnt
+                           FROM submissions s
+                           JOIN problems p ON p.id = s.problem_id
+                           WHERE s.verdict != 'AC'
+                           GROUP BY p.difficulty
+                           ORDER BY p.difficulty""")
+            wrong_distribution = [{'name': r['difficulty'], 'count': r['cnt']} for r in cur.fetchall()]
+
+            return {
+                'company_distribution': company_distribution,
+                'difficulty_distribution': difficulty_distribution,
+                'category_distribution': category_distribution,
+                'wrong_distribution': wrong_distribution,
+            }
+    finally:
+        connection.close()
 
 
 @router.get('/ai-usage', response_model=list[UsageSummary])

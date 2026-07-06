@@ -511,6 +511,11 @@ def _extract_offline_problem_candidates(raw_content: str, source_url: str) -> li
     if candidate:
         return [candidate]
 
+    # Try SSPoffer/neituiya format (Next.js, .ssp-oj-question-box)
+    candidate = _extract_ssp_candidate(document_html, resolved_source_url)
+    if candidate:
+        return [candidate]
+
     return []
 
 
@@ -604,6 +609,151 @@ def _extract_v2_candidate(document_html: str, source_url: str) -> OfflineProblem
         description_text=_strip_html_to_text(full_html),
         source_url=source_url,
         samples=samples,
+    )
+
+
+def _extract_ssp_candidate(document_html: str, source_url: str) -> OfflineProblemCandidate | None:
+    import re as _re
+    try:
+        from bs4 import BeautifulSoup, Tag
+    except ImportError:
+        return None
+
+    if 'ssp-oj-question-box' not in document_html.lower():
+        return None
+
+    soup = BeautifulSoup(document_html, 'html.parser')
+
+    title = ''
+    title_tag = soup.select_one('title')
+    if title_tag:
+        title = title_tag.get_text(strip=True).removesuffix('-sspoffer').strip()
+    if not title:
+        return None
+
+    difficulty = 'Medium'
+    time_limit_ms = 2000
+    memory_limit_kb = 262144
+    for item in soup.select('.info-item'):
+        text = item.get_text(strip=True)
+        if text in ('EASY', 'MIDDLE', 'HARD'):
+            difficulty_map = {'EASY': 'Easy', 'MIDDLE': 'Medium', 'HARD': 'Hard'}
+            difficulty = difficulty_map.get(text, 'Medium')
+        elif 'ms' in text:
+            t = _re.search(r'(\d+)', text)
+            if t:
+                time_limit_ms = int(t.group(1))
+        elif 'M' in text:
+            m = _re.search(r'(\d+)', text)
+            if m:
+                memory_limit_kb = int(m.group(1)) * 1024
+
+    cd = soup.select_one('.code-detail')
+    if not cd:
+        return None
+
+    # The inner div wraps all h2/p content
+    content_div = cd.find('div') or cd
+
+    section_map: dict[str, str] = {}
+    current_key = '_prelude'
+    section_map[current_key] = ''
+
+    for child in content_div.children:
+        if not isinstance(child, Tag):
+            continue
+        if child.name == 'h2':
+            current_key = child.get_text(strip=True)
+            section_map[current_key] = ''
+        elif current_key:
+            section_map[current_key] += str(child)
+
+    description_html = section_map.get('题目描述', '')
+    if not description_html.strip():
+        description_html = section_map.get('_prelude', '').strip()
+    if not description_html.strip():
+        return None
+
+    input_html = section_map.get('输入描述', '')
+    output_html = section_map.get('输出描述', '')
+
+    if input_html.strip():
+        description_html += f'<h2>输入描述</h2>{input_html}'
+    if output_html.strip():
+        description_html += f'<h2>输出描述</h2>{output_html}'
+
+    # Carry difficulty info for detect_metadata
+    diff_cn = {'Easy': '简单', 'Medium': '中等', 'Hard': '困难'}
+    description_html += f'\n\n难度提示：{diff_cn.get(difficulty, "中等")}\n'
+
+    description_html = _re.sub(r'[\u200b-\u200f\u2028-\u202f\u00ad\u2060\ufeff]+', '', description_html)
+    description_text = _strip_html_to_text(description_html)
+
+    samples: list[dict[str, str]] = []
+    for key in section_map:
+        if key.startswith('样例') and '解释' not in key:
+            sample_id = key
+            sample_html = section_map[key]
+            sample_text = _strip_html_to_text(sample_html)
+            inp = ''
+            out = ''
+            explain = ''
+            explanation_key = f'{key}解释' if key.startswith('样例') else f'{key}解释'
+            # Try to extract input/output from structured HTML
+            sample_soup = BeautifulSoup(sample_html, 'html.parser')
+            for strong in sample_soup.find_all('strong'):
+                label = strong.get_text(strip=True)
+                if '输入' in label:
+                    next_pre = strong.find_next('pre')
+                    if next_pre:
+                        code = next_pre.find('code') or next_pre
+                        inp = code.get_text(strip=True)
+                elif '输出' in label:
+                    next_pre = strong.find_next('pre')
+                    if next_pre:
+                        code = next_pre.find('code') or next_pre
+                        out = code.get_text(strip=True)
+                elif '解释' in label or '说明' in label:
+                    explain_texts = []
+                    nxt = strong.parent.find_next_sibling('p')
+                    while nxt and not nxt.find('strong'):
+                        explain_texts.append(_strip_html_to_text(str(nxt)))
+                        nxt = nxt.find_next_sibling('p')
+                    explain = '\n'.join(t for t in explain_texts if t)
+
+            # Fallback: extract plain text before/after "输入"/"输出" markers
+            if not inp and not out:
+                inp_match = _re.search(r'输入\s*\n*([\s\S]*?)(?=输出|样例解释|$)', sample_text, re.I)
+                if inp_match:
+                    inp = inp_match.group(1).strip()
+                out_match = _re.search(r'输出\s*\n*([\s\S]*?)(?=样例解释|$)', sample_text, re.I)
+                if out_match:
+                    out = out_match.group(1).strip()
+
+            if inp or out:
+                samples.append({'input': inp, 'output': out, 'explanation': explain})
+
+    if not samples:
+        return None
+
+    # Detect company from title: "【公司 岗位】日期-题号-标题"
+    company = '未知'
+    company_match = _re.search(r'【(.+?)】', title)
+    if company_match:
+        company = company_match.group(1).strip()
+    # Strip the prefix from title
+    title = _re.sub(r'^【.+?】\s*', '', title).strip()
+    title = _re.sub(r'\d{4}-\d{1,2}-\d{1,2}-第[一二三四五六七八九十\d]+题-', '', title).strip()
+
+    return OfflineProblemCandidate(
+        title=title,
+        description_html=description_html,
+        description_text=description_text,
+        source_url=source_url,
+        samples=samples,
+        difficulty=difficulty,
+        time_limit_ms=time_limit_ms,
+        memory_limit_kb=memory_limit_kb,
     )
 
 
@@ -722,8 +872,11 @@ def _build_offline_import_result(payload: ProblemImportRequest, analysis_service
     title = payload.title.strip() or '未命名题目'
     source_url = payload.source_url.strip()
 
-    difficulty = 'Medium'
+    difficulty = payload.difficulty or 'Medium'
     category_slug = 'simulation'
+    time_limit_ms = payload.time_limit_ms or 2000
+    memory_limit_kb = payload.memory_limit_kb or 262144
+    company = payload.company.strip() or '未知'
     if analysis_service is not None:
         raw_text = _strip_html_to_text(payload.description_html)
         if not raw_text.strip():
@@ -732,22 +885,25 @@ def _build_offline_import_result(payload: ProblemImportRequest, analysis_service
             try:
                 metadata = analysis_service.detect_metadata(raw_text)
                 category_slug = metadata.get('category_slug', 'simulation')
-                difficulty = metadata.get('difficulty', 'Medium')
+                if not payload.difficulty:
+                    difficulty = metadata.get('difficulty', 'Medium')
             except Exception:
                 pass
+
+    is_ssp = payload.source.strip() == 'ssp_offline'
 
     return ParsedProblemResult(
         slug=title,
         title=title,
-        company='未知',
+        company=company,
         difficulty=difficulty,
         category_slug=category_slug,
         statement_markdown=statement_markdown,
         tags=['未分类'],
-        time_limit_ms=2000,
-        memory_limit_kb=262144,
-        source='牛客',
-        source_type='牛客',
+        time_limit_ms=time_limit_ms,
+        memory_limit_kb=memory_limit_kb,
+        source='SSPoffer' if is_ssp else '牛客',
+        source_type='SSPoffer' if is_ssp else '牛客',
         frequency='中',
         year=None,
         source_ref=source_url,
@@ -814,8 +970,8 @@ def _build_import_payload(parsed, source_url: str) -> ProblemCreate:
             'C++': '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    return 0;\n}\n',
             'Java': 'public class Main {\n    public static void main(String[] args) {\n    }\n}\n',
         },
-        source_type='牛客',
-        source='牛客',
+        source_type=parsed.source_type or '牛客',
+        source=parsed.source or '牛客',
         frequency=parsed.frequency or '中',
         year=parsed.year,
         source_ref=source_url.strip() or parsed.source_ref,
@@ -886,7 +1042,7 @@ def _import_single_problem(
     samples = [item.model_dump() for item in payload.samples]
     raw_text = _build_import_raw_text(payload.title, description_text, samples)
 
-    if payload.source.strip() == 'niuke_offline':
+    if payload.source.strip() in ('niuke_offline', 'ssp_offline'):
         parsed = _build_offline_import_result(payload, analysis_service)
     else:
         if not raw_text:

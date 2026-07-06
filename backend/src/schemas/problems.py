@@ -64,6 +64,10 @@ class ProblemImportRequest(BaseModel):
     description_text: str = ''
     source_url: str = ''
     samples: list[ImportedProblemSample] = Field(default_factory=list)
+    difficulty: str | None = None
+    time_limit_ms: int | None = None
+    memory_limit_kb: int | None = None
+    company: str = ''
 
 
 class ProblemBatchImportRequest(BaseModel):
@@ -86,6 +90,9 @@ class OfflineProblemCandidate(BaseModel):
     description_text: str = ''
     source_url: str = ''
     samples: list[ImportedProblemSample] = Field(default_factory=list)
+    difficulty: str | None = None
+    time_limit_ms: int | None = None
+    memory_limit_kb: int | None = None
 
 
 class ProblemListItem(BaseModel):

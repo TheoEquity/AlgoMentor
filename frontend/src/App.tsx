@@ -6,6 +6,7 @@ import { getProblem, listProblems } from './lib/problemApi'
 import { listCategories } from './lib/categoryApi'
 import { getTrainingOverview } from './lib/trainingApi'
 import { listReviews } from './lib/reviewApi'
+import { DashboardPage } from './pages/DashboardPage'
 import { ProblemDetailPage } from './pages/ProblemDetailPage'
 import { ProblemCreatePage } from './pages/ProblemCreatePage'
 import { ProblemLibraryPage } from './pages/ProblemLibraryPage'
@@ -40,6 +41,10 @@ function readRouteFromLocation(): AppRouteState {
     }
   }
 
+  if (pathname === '/' || pathname === '/dashboard') {
+    return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+  }
+
   const chatProblemId = searchParams.get('problem_id')
   if (pathname === '/chat') {
     return {
@@ -62,7 +67,7 @@ function readRouteFromLocation(): AppRouteState {
     return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
   }
 
-  return { activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+  return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
 }
 
 function buildRoutePath(route: AppRouteState): string {
@@ -76,7 +81,7 @@ function buildRoutePath(route: AppRouteState): string {
     return `/chat?problem_id=${route.chatProblemId}`
   }
 
-  return route.activeNav === 'library' ? '/library' : `/${route.activeNav}`
+  return route.activeNav === 'dashboard' ? '/dashboard' : route.activeNav === 'library' ? '/library' : `/${route.activeNav}`
 }
 
 function App() {
@@ -99,6 +104,7 @@ function App() {
       return
     }
     const titles: Record<NavigationKey, string> = {
+      dashboard: '总览 - AlgoMentor',
       library: '题库 - AlgoMentor',
       training: '训练 - AlgoMentor',
       review: '复盘 - AlgoMentor',
@@ -236,6 +242,8 @@ function App() {
         </div>
       ) : activeNav === 'system' ? (
         <SystemSettingsPage />
+      ) : activeNav === 'dashboard' ? (
+        <DashboardPage />
       ) : activeNav === 'chat' ? (
         <ChatPage problemId={chatProblemId} />
       ) : activeNav === 'training' ? (
