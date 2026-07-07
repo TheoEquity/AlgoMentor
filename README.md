@@ -13,7 +13,7 @@ AlgoMentor 是一个面向算法刷题、笔试训练和错误复盘的全栈练
 - 训练复盘：按错误类型、题目、公司等维度整理训练数据。
 - 总览 Dashboard：题库全局分布（来源/难度/年度/题型/公司），图表可视化。
 - 数学公式渲染：题目 Markdown 支持 KaTeX 公式显示。
-- 数据种子：仓库包含 1100+ 道题目的完整种子数据。
+- 数据种子：仓库包含 1121 道题目的完整种子数据。
 
 ## 技术架构
 
@@ -75,7 +75,7 @@ AlgoMentor
 | 文件 | 内容 | 说明 |
 |------|------|------|
 | `database_seed.sql` | 公司、题型分类、Agent 配置、全部题目与测试用例 | 完整题库 + 系统配置 |
-| `problems_export.sql` | 全部 1100+ 道题目及测试用例 | 核心题库资产，可独立导入 |
+| `problems_export.sql` | 全部 1121 道题目及测试用例 | 核心题库资产，可独立导入 |
 
 ## 安装说明
 
@@ -121,7 +121,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 # 导入基础配置（公司、题型分类、种子题目）
 PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/database_seed.sql
 
-# 导出全部 1100+ 道题目及测试用例
+# 导出全部 1121 道题目及测试用例
 PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/problems_export.sql
 ```
 
