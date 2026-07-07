@@ -4,14 +4,16 @@ AlgoMentor 是一个面向算法刷题、笔试训练和错误复盘的全栈练
 
 ## 功能概览
 
-- 题库管理：按公司、题型、难度维护题目，支持题目详情、测试用例和语言模板。
-- 新增题目：支持粘贴原题文本并规则解析为结构化题目 Markdown。
+- 题库管理：按公司、题型、难度、来源维护题目，支持题目详情、测试用例和语言模板。
+- 新增题目：支持粘贴原题文本并规则解析为结构化题目 Markdown，支持 SSPoffer 离线文件批量导入。
 - 在线做题：前端集成 Monaco Editor，支持 Python、C++、Java 模板。
 - 提交与判题：对接 Judge0，保存运行结果、错误输出和失败用例。
-- AI 辅助：支持失败归因、题目解析、分步提示、代码评审等能力。
+- AI 辅助：失败归因、题目解析、分步提示、代码评审、AI 生题等 Agent 体系。
+- AI 生题：基于已有题目自动生成同类型派生题，追踪派生关系，一键入库。
 - 训练复盘：按错误类型、题目、公司等维度整理训练数据。
+- 总览 Dashboard：题库全局分布（来源/难度/年度/题型/公司），图表可视化。
 - 数学公式渲染：题目 Markdown 支持 KaTeX 公式显示。
-- 数据种子：仓库包含非 LLM 配置的数据库种子数据。
+- 数据种子：仓库包含 1100+ 道题目的完整种子数据。
 
 ## 技术架构
 
@@ -45,9 +47,11 @@ AlgoMentor
 
 - FastAPI 提供 REST API
 - Pydantic / pydantic-settings 管理模型和配置
-- PostgreSQL 存储题目、测试用例、提交记录、归因结果、公司和题型配置
+- PostgreSQL 存储题目、测试用例、提交记录、Agent 配置和业务数据
 - psycopg2 访问数据库
 - Judge0 用于代码运行与判题
+- 多 Agent 体系：解题 Agent / 答题辅导 Agent / 教练 Agent / AI 生题 Agent / 解析 Agent / 聊天 Agent
+- ECharts 图表 Dashboard 可视化
 - LLM 配置通过系统设置维护，数据库种子文件不包含 LLM 配置和密钥
 
 ### 数据库表
@@ -57,11 +61,12 @@ AlgoMentor
 - `users`
 - `companies`
 - `problem_categories`
-- `problems`
+- `problems`（含 `source_problem_id` 追踪 AI 派生关系）
 - `problem_test_cases`
 - `submissions`
 - `error_attributions`
 - `llm_settings`
+- `ai_agents` / `ai_tools` / `ai_skills` — AI Agent 配置表
 
 `backend/src/data/database_seed.sql` 导出了除 `llm_settings` 外的本地数据，可用于初始化题库、提交记录和复盘数据。
 
@@ -69,8 +74,8 @@ AlgoMentor
 
 | 文件 | 内容 | 说明 |
 |------|------|------|
-| `database_seed.sql` | 公司、题型分类、少量示例题目 | 表结构初始化 + 基础配置 |
-| `problems_export.sql` | 全部 303 道题目及测试用例 | 核心题库资产，可独立导入 |
+| `database_seed.sql` | 公司、题型分类、Agent 配置、全部题目与测试用例 | 完整题库 + 系统配置 |
+| `problems_export.sql` | 全部 1100+ 道题目及测试用例 | 核心题库资产，可独立导入 |
 
 ## 安装说明
 
@@ -116,7 +121,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 # 导入基础配置（公司、题型分类、种子题目）
 PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/database_seed.sql
 
-# 导入全部 303 道题目及测试用例
+# 导出全部 1100+ 道题目及测试用例
 PGPASSWORD=bytehunter123 psql -h localhost -U bytehunter -d bytehunter -f backend/src/data/problems_export.sql
 ```
 
