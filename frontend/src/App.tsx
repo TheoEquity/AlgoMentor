@@ -230,6 +230,9 @@ function App() {
           onGoToChat={(problemId) => {
             navigateTo({ activeNav: 'chat', selectedProblemId: null, problemMode: 'overview', chatProblemId: problemId })
           }}
+          onProblemGenerated={(problemId) => {
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
+          }}
         />
       ) : isWorkspace && selectedProblem ? (
         <ProblemDetailPage problem={selectedProblem} onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })} />

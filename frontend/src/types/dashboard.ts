@@ -14,4 +14,6 @@ export type DashboardData = {
   difficulty_distribution: DistributionItem[]
   category_distribution: CategoryDistributionItem[]
   wrong_distribution: DistributionItem[]
+  source_distribution: DistributionItem[]
+  year_distribution: DistributionItem[]
 }

@@ -10,6 +10,7 @@ export interface ProblemListFilters {
   categorySlug?: string
   search?: string
   position?: string
+  source?: string
 }
 
 export async function listProblems(filters: ProblemListFilters = {}): Promise<PaginatedProblemsResponse> {
@@ -21,6 +22,7 @@ export async function listProblems(filters: ProblemListFilters = {}): Promise<Pa
   if (filters.categorySlug) params.set('category_slug', filters.categorySlug)
   if (filters.search) params.set('search', filters.search)
   if (filters.position) params.set('position', filters.position)
+  if (filters.source) params.set('source', filters.source)
   const queryString = params.toString()
   try {
     return await requestJSON<PaginatedProblemsResponse>(`/problems${queryString ? `?${queryString}` : ''}`)
@@ -87,6 +89,20 @@ export async function deleteProblem(problemId: number): Promise<void> {
   }
 }
 
+export async function generateSimilarProblem(problemId: number): Promise<ProblemDetail> {
+  return requestJSON<ProblemDetail>(`/problems/${problemId}/generate-similar`, {
+    method: 'POST',
+  })
+}
+
+export async function fetchDerivedProblems(problemId: number): Promise<ProblemListItem[]> {
+  try {
+    return await requestJSON<ProblemListItem[]>(`/problems/${problemId}/derived`)
+  } catch {
+    return []
+  }
+}
+
 export async function fetchDistinctCompanies(): Promise<string[]> {
   try {
     return await requestJSON<string[]>('/problems/distinct-companies')
@@ -98,6 +114,14 @@ export async function fetchDistinctCompanies(): Promise<string[]> {
 export async function fetchDistinctPositions(): Promise<string[]> {
   try {
     return await requestJSON<string[]>('/problems/distinct-positions')
+  } catch {
+    return []
+  }
+}
+
+export async function fetchDistinctSources(): Promise<string[]> {
+  try {
+    return await requestJSON<string[]>('/problems/distinct-sources')
   } catch {
     return []
   }

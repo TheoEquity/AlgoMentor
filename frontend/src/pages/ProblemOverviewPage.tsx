@@ -4,10 +4,10 @@ import { MarkdownRenderer } from '../components/MarkdownRenderer'
 import { analyzeProblem } from '../lib/analysisApi'
 import { listCategories } from '../lib/categoryApi'
 import { listCompanies } from '../lib/companyApi'
-import { updateProblem } from '../lib/problemApi'
+import { updateProblem, generateSimilarProblem, fetchDerivedProblems } from '../lib/problemApi'
 import type { AnalysisResult } from '../types/analysis'
 import type { Company } from '../types/company'
-import type { ProblemCreatePayload, ProblemDetail, ProblemLatestStatus } from '../types/problem'
+import type { ProblemCreatePayload, ProblemDetail, ProblemLatestStatus, ProblemListItem } from '../types/problem'
 import type { ProblemCategory } from '../types/problemCategory'
 
 type ProblemOverviewPageProps = {
@@ -17,6 +17,7 @@ type ProblemOverviewPageProps = {
   onStartTraining: () => void
   onProblemSaved: (problem: ProblemDetail) => void
   onGoToChat: (problemId: number, problemTitle: string) => void
+  onProblemGenerated: (problemId: number) => void
 }
 
 type ProblemEditForm = {
@@ -88,7 +89,7 @@ function normalizeLatestStatus(status: string): ProblemLatestStatus {
   return '未开始'
 }
 
-export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTraining, onProblemSaved, onGoToChat }: ProblemOverviewPageProps) {
+export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTraining, onProblemSaved, onGoToChat, onProblemGenerated }: ProblemOverviewPageProps) {
   const [form, setForm] = useState<ProblemEditForm>(() => buildEditForm(problem))
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
@@ -100,6 +101,9 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
   const [isAnalyzingProblem, setIsAnalyzingProblem] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [hasLocalAnalysis, setHasLocalAnalysis] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generatingError, setGeneratingError] = useState('')
+  const [derivedProblems, setDerivedProblems] = useState<ProblemListItem[]>([])
   const prevProblemIdRef = useRef(problem.id)
 
   useEffect(() => {
@@ -133,6 +137,10 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
       listCategories().then(setCategories).catch(() => {}),
     ])
   }, [])
+
+  useEffect(() => {
+    void fetchDerivedProblems(problem.id).then(setDerivedProblems).catch(() => {})
+  }, [problem.id])
 
   const handleFieldChange = (field: keyof ProblemEditForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }))
@@ -210,6 +218,20 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
 
   const handleGoToChat = () => {
     onGoToChat(problem.id, problem.title)
+  }
+
+  const handleGenerateSimilar = async () => {
+    setIsGenerating(true)
+    setGeneratingError('')
+    try {
+      const newProblem = await generateSimilarProblem(problem.id)
+      void fetchDerivedProblems(problem.id).then(setDerivedProblems).catch(() => {})
+      onProblemGenerated(newProblem.id)
+    } catch (error) {
+      setGeneratingError(error instanceof Error ? error.message : '生题失败')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -380,6 +402,34 @@ export function ProblemOverviewPage({ problem, categoryName, onBack, onStartTrai
             </div>
           </div>
         ) : null}
+
+        <div className="problem-chat-panel">
+          <div className="ai-card-header">
+            <div>
+              <h3>AI 生题</h3>
+              <p>基于本题生成一道同类型但场景不同的全新算法题，自动保存至题库。</p>
+              {generatingError ? <span className="save-error-text">生成失败：{generatingError}</span> : null}
+            </div>
+            <button type="button" className="button primary" disabled={isGenerating} onClick={() => void handleGenerateSimilar()}>
+              {isGenerating ? '生成中...' : 'AI 生题'}
+            </button>
+          </div>
+          {derivedProblems.length > 0 ? (
+            <div className="ai-derived-list">
+              <h4>AI 派生 ({derivedProblems.length})</h4>
+              <ul>
+                {derivedProblems.map((item) => (
+                  <li key={item.id}>
+                    <span className="derived-id">#{item.id}</span>
+                    <button type="button" className="button-link" onClick={() => onProblemGenerated(item.id)}>
+                      {item.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
 
         <div className="problem-chat-panel">
           <div className="ai-card-header">

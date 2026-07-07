@@ -451,6 +451,7 @@ CREATE TABLE public.problems (
     source text DEFAULT '手工'::text NOT NULL,
     frequency text DEFAULT '中'::text NOT NULL,
     year integer,
+    source_problem_id integer REFERENCES problems(id) ON DELETE SET NULL,
     source_ref text,
     external_id text,
     status text DEFAULT '未开始'::text NOT NULL,

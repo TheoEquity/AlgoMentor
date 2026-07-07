@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { createProblem, deleteProblem, fetchDistinctCompanies, fetchDistinctPositions, listProblems } from '../lib/problemApi'
+import { createProblem, deleteProblem, fetchDistinctCompanies, fetchDistinctPositions, fetchDistinctSources, listProblems } from '../lib/problemApi'
 import { listCategories } from '../lib/categoryApi'
 import { listCompanies } from '../lib/companyApi'
 import type { ProblemCategory } from '../types/problemCategory'
@@ -57,11 +57,13 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
   const [categories, setCategories] = useState<ProblemCategory[]>([])
   const [distinctCompanies, setDistinctCompanies] = useState<string[]>([])
   const [distinctPositions, setDistinctPositions] = useState<string[]>([])
+  const [distinctSources, setDistinctSources] = useState<string[]>([])
   const [searchText, setSearchText] = useState('')
   const [company, setCompany] = useState('all')
   const [categorySlug, setCategorySlug] = useState('all')
   const [difficulty, setDifficulty] = useState('all')
   const [positionFilter, setPositionFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [createError, setCreateError] = useState('')
   const [createSuccess, setCreateSuccess] = useState('')
@@ -89,7 +91,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
     java_template: 'public class Main {\n    public static void main(String[] args) throws Exception {\n    }\n}\n',
   })
 
-  const prevFiltersRef = useRef({ searchText, company, categorySlug, difficulty, positionFilter })
+  const prevFiltersRef = useRef({ searchText, company, categorySlug, difficulty, positionFilter, sourceFilter })
 
   useEffect(() => {
     void Promise.all([
@@ -97,6 +99,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       listCategories().then(setCategories).catch(() => {}),
       fetchDistinctCompanies().then(setDistinctCompanies).catch(() => {}),
       fetchDistinctPositions().then(setDistinctPositions).catch(() => {}),
+      fetchDistinctSources().then(setDistinctSources).catch(() => {}),
     ])
   }, [])
 
@@ -108,12 +111,13 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       prev.company !== company ||
       prev.categorySlug !== categorySlug ||
       prev.difficulty !== difficulty ||
-      prev.positionFilter !== positionFilter
+      prev.positionFilter !== positionFilter ||
+      prev.sourceFilter !== sourceFilter
     ) {
       setCurrentPage(1)
-      prevFiltersRef.current = { searchText, company, categorySlug, difficulty, positionFilter }
+      prevFiltersRef.current = { searchText, company, categorySlug, difficulty, positionFilter, sourceFilter }
     }
-  }, [searchText, company, categorySlug, difficulty, positionFilter])
+  }, [searchText, company, categorySlug, difficulty, positionFilter, sourceFilter])
 
   useEffect(() => {
     let cancelled = false
@@ -126,6 +130,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
       categorySlug: categorySlug !== 'all' ? categorySlug : undefined,
       difficulty: difficulty !== 'all' ? difficulty : undefined,
       position: positionFilter !== 'all' ? positionFilter : undefined,
+      source: sourceFilter !== 'all' ? sourceFilter : undefined,
     })
       .then((result) => {
         if (!cancelled) {
@@ -138,9 +143,11 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
         if (!cancelled) setIsLoading(false)
       })
     return () => { cancelled = true }
-  }, [currentPage, searchText, company, categorySlug, difficulty, positionFilter])
+  }, [currentPage, searchText, company, categorySlug, difficulty, positionFilter, sourceFilter])
 
   const positionNames = useMemo(() => distinctPositions, [distinctPositions])
+
+  const sourceNames = useMemo(() => distinctSources, [distinctSources])
 
   const companyNames = useMemo(() => distinctCompanies, [distinctCompanies])
 
@@ -313,6 +320,19 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
               </select>
             </label>
           ) : null}
+
+          {sourceNames.length > 0 ? (
+            <label className="filter-control">
+              <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                <option value="all">全部来源</option>
+                {sourceNames.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         <div className="toolbar-row">
@@ -344,6 +364,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                 setCategorySlug('all')
                 setDifficulty('all')
                 setPositionFilter('all')
+                setSourceFilter('all')
               }}
             >
               重置

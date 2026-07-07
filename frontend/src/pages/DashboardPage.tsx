@@ -9,6 +9,9 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   Hard: '#ff4d4f',
 }
 
+const SOURCE_COLORS = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4']
+const YEAR_COLORS = ['#e8c600', '#36a2eb', '#ff6384', '#4bc0c0', '#9966ff', '#ff9f40', '#c9cbcf']
+
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
@@ -27,7 +30,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (!data) return
-    const el = document.getElementById('chart-company')
+    const el = document.getElementById('chart-source')
     if (!el) return
     const chart = echarts.init(el)
     chart.setOption({
@@ -35,7 +38,10 @@ export function DashboardPage() {
       series: [{
         type: 'pie', radius: ['40%', '60%'],
         label: { show: true, formatter: '{b}\n{c}', fontSize: 11 },
-        data: data.company_distribution.map(d => ({ name: d.name, value: d.count })),
+        data: data.source_distribution.map((d, i) => ({
+          name: d.name, value: d.count,
+          itemStyle: { color: SOURCE_COLORS[i % SOURCE_COLORS.length] },
+        })),
       }],
     })
     return () => chart.dispose()
@@ -55,6 +61,51 @@ export function DashboardPage() {
           name: d.name, value: d.count,
           itemStyle: { color: DIFFICULTY_COLORS[d.name] || '#999' },
         })),
+      }],
+    })
+    return () => chart.dispose()
+  }, [data])
+
+  useEffect(() => {
+    if (!data) return
+    const el = document.getElementById('chart-year')
+    if (!el) return
+    const chart = echarts.init(el)
+    chart.setOption({
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      series: [{
+        type: 'pie', radius: ['40%', '60%'],
+        label: { show: true, formatter: '{b}\n{c}', fontSize: 11 },
+        data: data.year_distribution.map((d, i) => ({
+          name: d.name, value: d.count,
+          itemStyle: { color: YEAR_COLORS[i % YEAR_COLORS.length] },
+        })),
+      }],
+    })
+    return () => chart.dispose()
+  }, [data])
+
+  useEffect(() => {
+    if (!data) return
+    const el = document.getElementById('chart-company')
+    if (!el) return
+    const chart = echarts.init(el)
+    const names = data.company_distribution.map(d => d.name)
+    const counts = data.company_distribution.map(d => d.count)
+    chart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: 50, right: 30, top: 8, bottom: 60 },
+      xAxis: {
+        type: 'category',
+        data: names,
+        axisLabel: { rotate: 45, fontSize: 11 },
+      },
+      yAxis: { type: 'value' },
+      series: [{
+        type: 'bar',
+        data: counts,
+        itemStyle: { color: '#52c41a', borderRadius: [3, 3, 0, 0] },
+        label: { show: true, position: 'top', fontSize: 10 },
       }],
     })
     return () => chart.dispose()
@@ -84,25 +135,6 @@ export function DashboardPage() {
     return () => chart.dispose()
   }, [data])
 
-  useEffect(() => {
-    if (!data) return
-    const el = document.getElementById('chart-wrong')
-    if (!el) return
-    const chart = echarts.init(el)
-    chart.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      series: [{
-        type: 'pie', radius: ['40%', '60%'],
-        label: { show: true, formatter: '{b}\n{c}', fontSize: 11 },
-        data: data.wrong_distribution.map(d => ({
-          name: d.name, value: d.count,
-          itemStyle: { color: DIFFICULTY_COLORS[d.name] || '#999' },
-        })),
-      }],
-    })
-    return () => chart.dispose()
-  }, [data])
-
   if (error) {
     return <div className="backend-note">{error}</div>
   }
@@ -120,17 +152,22 @@ export function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="table-card" style={{ padding: '14px 20px' }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>公司分布</h3>
-          <div id="chart-company" style={{ width: '100%', height: 220 }} />
+          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>来源分布</h3>
+          <div id="chart-source" style={{ width: '100%', height: 220 }} />
         </div>
         <div className="table-card" style={{ padding: '14px 20px' }}>
           <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>难度分布</h3>
           <div id="chart-difficulty" style={{ width: '100%', height: 220 }} />
         </div>
         <div className="table-card" style={{ padding: '14px 20px' }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>错题分布</h3>
-          <div id="chart-wrong" style={{ width: '100%', height: 220 }} />
+          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>年度分布</h3>
+          <div id="chart-year" style={{ width: '100%', height: 220 }} />
         </div>
+      </div>
+
+      <div className="table-card" style={{ padding: '14px 20px', marginBottom: 16 }}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>公司分布</h3>
+        <div id="chart-company" style={{ width: '100%', height: 260 }} />
       </div>
 
       <div className="table-card" style={{ padding: '14px 20px' }}>

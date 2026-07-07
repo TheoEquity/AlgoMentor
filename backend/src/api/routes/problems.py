@@ -2,6 +2,7 @@ from email import policy
 from email.parser import BytesParser
 from html import unescape
 from html.parser import HTMLParser
+import json
 import re
 import urllib.parse
 import quopri
@@ -707,12 +708,12 @@ def _extract_ssp_candidate(document_html: str, source_url: str) -> OfflineProble
                     next_pre = strong.find_next('pre')
                     if next_pre:
                         code = next_pre.find('code') or next_pre
-                        inp = code.get_text(strip=True)
+                        inp = code.get_text(strip=True).removesuffix('复制')
                 elif '输出' in label:
                     next_pre = strong.find_next('pre')
                     if next_pre:
                         code = next_pre.find('code') or next_pre
-                        out = code.get_text(strip=True)
+                        out = code.get_text(strip=True).removesuffix('复制')
                 elif '解释' in label or '说明' in label:
                     explain_texts = []
                     nxt = strong.parent.find_next_sibling('p')
@@ -732,6 +733,41 @@ def _extract_ssp_candidate(document_html: str, source_url: str) -> OfflineProble
 
             if inp or out:
                 samples.append({'input': inp, 'output': out, 'explanation': explain})
+
+    # Fallback: samples embedded in description body (no h2 heading)
+    if not samples:
+        desc_soup = BeautifulSoup(description_html, 'html.parser')
+        strongs = desc_soup.find_all('strong')
+        i = 0
+        while i < len(strongs):
+            label = strongs[i].get_text(strip=True)
+            if '输入' in label:
+                inp = ''
+                out = ''
+                explain = ''
+                next_pre = strongs[i].find_next('pre')
+                if next_pre:
+                    code = next_pre.find('code') or next_pre
+                    inp = code.get_text(strip=True).removesuffix('复制')
+                # Look for 输出 after 输入
+                if i + 1 < len(strongs) and '输出' in strongs[i+1].get_text(strip=True):
+                    next_pre = strongs[i+1].find_next('pre')
+                    if next_pre:
+                        code = next_pre.find('code') or next_pre
+                        out = code.get_text(strip=True).removesuffix('复制')
+                    i += 1
+                # Look for 解释 after 输出
+                if i + 1 < len(strongs) and ('解释' in strongs[i+1].get_text(strip=True) or '说明' in strongs[i+1].get_text(strip=True)):
+                    explain_texts = []
+                    nxt = strongs[i+1].parent.find_next_sibling('p')
+                    while nxt and not nxt.find('strong'):
+                        explain_texts.append(_strip_html_to_text(str(nxt)))
+                        nxt = nxt.find_next_sibling('p')
+                    explain = '\n'.join(t for t in explain_texts if t)
+                    i += 1
+                if inp or out:
+                    samples.append({'input': inp, 'output': out, 'explanation': explain})
+            i += 1
 
     if not samples:
         return None
@@ -989,6 +1025,7 @@ async def list_problems(
     tag: str | None = Query(default=None),
     search: str | None = Query(default=None),
     position: str | None = Query(default=None),
+    source: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     repository: ProblemRepository = Depends(get_repository),
@@ -1001,6 +1038,7 @@ async def list_problems(
         tag=tag,
         search=search,
         position=position,
+        source=source,
         page=page,
         page_size=page_size,
     )
@@ -1019,6 +1057,13 @@ async def distinct_positions(
     repository: ProblemRepository = Depends(get_repository),
 ) -> list[str]:
     return repository.distinct_positions()
+
+
+@router.get('/distinct-sources', response_model=list[str])
+async def distinct_sources(
+    repository: ProblemRepository = Depends(get_repository),
+) -> list[str]:
+    return repository.distinct_sources()
 
 
 @router.post('/import', response_model=ProblemDetail, status_code=status.HTTP_201_CREATED)
@@ -1094,6 +1139,149 @@ async def extract_offline_problems(payload: OfflineProblemExtractRequest) -> lis
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='离线文件中未识别到可导入的编程题')
 
     return candidates
+
+
+@router.post('/{problem_id}/generate-similar', response_model=ProblemDetail)
+async def generate_similar_problem(
+    problem_id: int,
+    repository: ProblemRepository = Depends(get_repository),
+) -> ProblemDetail:
+    original = repository.get_problem(problem_id)
+    if original is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+
+    from schemas.agent import AgentCreate
+    from schemas.agent_run import AgentRunRequest
+    from repositories.agent_repository import AgentRepository
+    from services.agent import AgentRunner
+
+    settings = Settings()
+    runner = AgentRunner(settings)
+    agent_repo = AgentRepository(settings.database_url)
+
+    agent = agent_repo.get_agent_by_slug('problem-generator')
+    if not agent:
+        agent_create = AgentCreate(
+            slug='problem-generator',
+            name='AI 生题 Agent',
+            description='根据参考题目用 AI 生成一道同类型但场景不同的全新题目',
+            system_prompt=(
+                '你是算法竞赛命题专家。根据参考题目生成一道**同类型但场景不同**的算法题。'
+                '保持相同难度和题型分类，变换故事背景、数值和具体条件，但核心算法思想一致。\n\n'
+                '严格按以下 JSON 格式输出，不要带 ```json 标记或其他额外内容：\n'
+                '{"title":"...","statement_markdown":"...","examples":[{"input":"...","output":"...","explanation":"..."}],"tags":["..."]}'
+            ),
+            user_prompt_template=(
+                '## 参考题目\n'
+                '- 标题：{{ problem.title }}\n'
+                '- 题型：{{ problem.category_slug }}\n'
+                '- 难度：{{ problem.difficulty }}\n'
+                '- 公司：{{ problem.company }}\n'
+                '- 岗位：{{ problem.position }}\n'
+                '- 年度：{{ problem.year }}\n\n'
+                '## 原题描述\n'
+                '{{ problem.statement_markdown }}\n\n'
+                '{% if original_examples %}\n'
+                '## 原题样例\n'
+                '{% for ex in original_examples %}\n'
+                '- 输入：{{ ex.input }}\n'
+                '- 输出：{{ ex.output }}\n'
+                '{% if ex.explanation %}- 解释：{{ ex.explanation }}{% endif %}\n'
+                '{% endfor %}\n'
+                '{% endif %}'
+            ),
+            model='qwen3.6-plus',
+            temperature=0.7,
+            max_tokens=4096,
+            max_iterations=1,
+            sort_order=6,
+        )
+        agent = agent_repo.create_agent(agent_create)
+        runner.reload_agents()
+
+    ctx = {
+        'problem': {
+            'title': original.title,
+            'category_slug': original.category_slug,
+            'difficulty': original.difficulty,
+            'company': original.company,
+            'position': original.position or '研发',
+            'year': str(original.year) if original.year else '未知',
+            'statement_markdown': original.statement_markdown,
+        },
+        'original_examples': [
+            {'input': ex.input, 'output': ex.output, 'explanation': ex.explanation}
+            for ex in original.examples
+        ],
+    }
+
+    agent_request = AgentRunRequest(context=ctx)
+    result = runner.run('problem-generator', agent_request)
+
+    if not result.content:
+        raise HTTPException(status_code=500, detail='生题 Agent 未返回有效结果')
+
+    try:
+        data = json.loads(result.content)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail=f'生题 Agent 返回格式异常：{result.content[:200]}')
+
+    examples = [
+        ExampleItem(
+            input=ex.get('input', ''),
+            output=ex.get('output', ''),
+            explanation=ex.get('explanation', ''),
+        )
+        for ex in data.get('examples', [])
+    ]
+    if not examples:
+        examples = [ExampleItem(input='1 2', output='3', explanation='示例输入输出')]
+
+    tags = data.get('tags', original.tags[:1] if original.tags else ['算法'])
+    if not isinstance(tags, list) or len(tags) == 0:
+        tags = original.tags[:1] if original.tags else ['算法']
+
+    base_slug = re.sub(r'[^a-z0-9-]', '', data.get('title', original.title).lower().replace(' ', '-'))[:60].strip('-')
+    if not base_slug:
+        base_slug = 'ai-generated'
+
+    payload = ProblemCreate(
+        slug=base_slug,
+        title=data.get('title', f'{original.title}（变体）'),
+        company=original.company,
+        position=original.position or '研发',
+        difficulty=original.difficulty,
+        category_slug=original.category_slug,
+        statement_markdown=data.get('statement_markdown', original.statement_markdown),
+        constraints_text=original.constraints_text,
+        time_limit_ms=original.time_limit_ms,
+        memory_limit_kb=original.memory_limit_kb,
+        tags=tags,
+        examples=examples,
+        supported_languages=['Python', 'C++', 'Java'],
+        starter_templates={'Python': '', 'C++': '', 'Java': ''},
+        source_type='ai-derived',
+        source='AI派生',
+        source_problem_id=problem_id,
+        year=original.year,
+        test_cases=[
+            ProblemTestCase(case_type='sample', stdin_text=ex.input, expected_output_text=ex.output, sort_order=i + 1)
+            for i, ex in enumerate(examples)
+        ],
+    )
+
+    return repository.create_problem(payload)
+
+
+@router.get('/{problem_id}/derived', response_model=list[ProblemListItem])
+async def get_derived_problems(
+    problem_id: int,
+    repository: ProblemRepository = Depends(get_repository),
+) -> list[ProblemListItem]:
+    original = repository.get_problem(problem_id)
+    if original is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Problem not found')
+    return repository.get_derived_problems(problem_id)
 
 
 @router.get('/{problem_id}', response_model=ProblemDetail)

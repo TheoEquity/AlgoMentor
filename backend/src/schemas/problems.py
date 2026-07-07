@@ -43,6 +43,7 @@ class ProblemBase(BaseModel):
     external_id: str = ''
     status: Literal['未开始', '已通过', '待复盘', '待修正'] = '未开始'
     analysis_json: str | None = None
+    source_problem_id: int | None = None
 
 
 class ProblemCreate(ProblemBase):
@@ -112,6 +113,7 @@ class ProblemListItem(BaseModel):
     time_limit_ms: int = 2000
     memory_limit_kb: int = 262144
     updated_at: str
+    source_problem_id: int | None = None
 
 
 class PaginatedProblemsResponse(BaseModel):

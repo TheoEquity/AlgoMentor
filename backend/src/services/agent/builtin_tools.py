@@ -211,3 +211,93 @@ def generate_study_plan(args: dict, context: dict) -> str:
 def recommend_daily_problems(args: dict, context: dict) -> str:
     count = args.get('count', 5)
     return f'[模拟] 已推荐 {count} 道今日练习题。注：完整实现依赖用户训练历史和未做题目列表。'
+
+
+def generate_similar_problem(args: dict, context: dict) -> str:
+    from core.db import get_connection
+
+    problem_id = args.get('problem_id')
+    if not problem_id:
+        return '错误：请提供 problem_id 参数。'
+
+    db_url = context.get('database_url', '')
+    connection = get_connection(db_url)
+    with connection, connection.cursor() as cursor:
+        cursor.execute(
+            '''SELECT id, title, company, difficulty, category_slug, position, year,
+                      statement_markdown, source_type
+               FROM problems WHERE id = %s''',
+            (problem_id,),
+        )
+        row = cursor.fetchone()
+    connection.close()
+
+    if not row:
+        return f'未找到题目 #{problem_id}。'
+
+    original = {
+        'id': row['id'],
+        'title': row['title'],
+        'company': row['company'],
+        'difficulty': row['difficulty'],
+        'category_slug': row['category_slug'],
+        'position': row['position'],
+        'year': row['year'],
+        'statement_markdown': row['statement_markdown'],
+        'source_type': row['source_type'],
+    }
+
+    from services.llm_client import LLMClient
+    from repositories.llm_settings_repository import LLMSettingsRepository
+
+    settings_repo = LLMSettingsRepository(db_url)
+    settings = settings_repo.get_settings()
+    if not settings:
+        return '错误：未配置 LLM 设置，请先在系统设置中配置。'
+
+    api_key = settings_repo.get_api_key()
+    model_name = settings.review_model or settings.solution_model or 'gpt-4.1-mini'
+    temperature = settings.review_temperature or 0.5
+
+    prompt = f"""你是一位算法竞赛命题专家。请参考以下题目，生成一道**同类型但内容不同**的算法题。
+
+## 原题信息
+- 标题：{original['title']}
+- 公司：{original['company']}
+- 岗位：{original['position'] or '未知'}
+- 难度：{original['difficulty']}
+- 题型分类：{original['category_slug']}
+- 年度：{original['year'] or '未知'}
+
+## 原题描述
+{original['statement_markdown']}
+
+## 要求
+1. 保持相同题型和难度级别
+2. 变换题目场景和具体数值，但算法核心思想一致
+3. 生成完整的题目描述（含输入输出格式说明）
+4. 提供 1-2 个样例（输入/输出/解释）
+5. 新题目标题要有区分度，不要和原题重复
+
+请按以下 JSON 格式输出：
+```json
+{{
+  "title": "新题目标题",
+  "difficulty": "{original['difficulty']}",
+  "category_slug": "{original['category_slug']}",
+  "statement_markdown": "完整的题目描述（Markdown格式，含输入描述、输出描述、样例）",
+  "examples": [
+    {{"input": "样例输入", "output": "样例输出", "explanation": "样例解释"}}
+  ],
+  "company": "{original['company']}",
+  "position": "{original['position'] or '研发'}"
+}}
+```
+只输出 JSON，不要其他内容。"""
+
+    client = LLMClient()
+    try:
+        result = client.generate_json(settings, api_key, model_name, prompt, temperature)
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return f'生成失败：{exc}'

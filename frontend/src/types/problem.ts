@@ -15,6 +15,7 @@ export type ProblemListItem = {
   time_limit_ms: number
   memory_limit_kb: number
   updated_at: string
+  source_problem_id?: number | null
 }
 
 export type ProblemExample = {

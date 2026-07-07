@@ -21,6 +21,7 @@ class ProblemRepository:
         tag: str | None,
         search: str | None = None,
         position: str | None = None,
+        source: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[ProblemListItem], int]:
@@ -30,6 +31,7 @@ class ProblemRepository:
             '(%s IS NULL OR category_slug = %s)',
             '(%s IS NULL OR tags_json LIKE %s OR tags_json LIKE %s)',
             '(%s IS NULL OR position = %s)',
+            '(%s IS NULL OR source = %s)',
             '(%s IS NULL OR title ILIKE %s OR company ILIKE %s)',
         ]
         base_conditions = 'WHERE ' + ' AND '.join(conditions)
@@ -43,6 +45,7 @@ class ProblemRepository:
             category_slug, category_slug,
             tag, tag_like, tag_json_like,
             position, position,
+            source, source,
             search, search_like, search_like,
         )
 
@@ -105,8 +108,8 @@ class ProblemRepository:
                     statement_markdown, constraints_text, tags_json,
                     examples_json, supported_languages_json, starter_templates_json,
                     source_type, source, frequency, year, source_ref, external_id,
-                    status, time_limit_ms, memory_limit_kb, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    status, time_limit_ms, memory_limit_kb, source_problem_id, created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 ''',
                 (
@@ -131,6 +134,7 @@ class ProblemRepository:
                     payload.status,
                     payload.time_limit_ms,
                     payload.memory_limit_kb,
+                    payload.source_problem_id,
                     now,
                     now,
                 ),
@@ -283,6 +287,7 @@ class ProblemRepository:
             time_limit_ms=row.get('time_limit_ms', 2000),
             memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
+            source_problem_id=row.get('source_problem_id'),
         )
 
     def _make_unique_slug(self, slug: str) -> str:
@@ -327,6 +332,7 @@ class ProblemRepository:
             memory_limit_kb=row.get('memory_limit_kb', 262144),
             updated_at=row['updated_at'],
             analysis_json=row.get('analysis_json'),
+            source_problem_id=row.get('source_problem_id'),
             test_cases=[ProblemRepository._test_case_from_row(tcr) for tcr in test_case_rows],
         )
 
@@ -354,3 +360,22 @@ class ProblemRepository:
             rows = cursor.fetchall()
         connection.close()
         return [row['position'] for row in rows]
+
+    def distinct_sources(self) -> list[str]:
+        connection = get_connection(self.database_url)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT source FROM problems WHERE source IS NOT NULL AND source != '' ORDER BY source")
+            rows = cursor.fetchall()
+        connection.close()
+        return [row['source'] for row in rows]
+
+    def get_derived_problems(self, problem_id: int) -> list[ProblemListItem]:
+        connection = get_connection(self.database_url)
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT * FROM problems WHERE source_problem_id = %s ORDER BY created_at DESC',
+                (problem_id,),
+            )
+            rows = cursor.fetchall()
+        connection.close()
+        return [self._list_item_from_row(row) for row in rows]

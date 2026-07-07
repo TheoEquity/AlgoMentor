@@ -156,11 +156,27 @@ async def get_dashboard() -> dict:
                            ORDER BY p.difficulty""")
             wrong_distribution = [{'name': r['difficulty'], 'count': r['cnt']} for r in cur.fetchall()]
 
+            cur.execute("""SELECT source_type, COUNT(*) AS cnt
+                           FROM problems
+                           WHERE source_type IS NOT NULL AND source_type != ''
+                           GROUP BY source_type
+                           ORDER BY cnt DESC""")
+            source_distribution = [{'name': r['source_type'], 'count': r['cnt']} for r in cur.fetchall()]
+
+            cur.execute("""SELECT year, COUNT(*) AS cnt
+                           FROM problems
+                           WHERE year IS NOT NULL
+                           GROUP BY year
+                           ORDER BY year""")
+            year_distribution = [{'name': str(r['year']), 'count': r['cnt']} for r in cur.fetchall()]
+
             return {
                 'company_distribution': company_distribution,
                 'difficulty_distribution': difficulty_distribution,
                 'category_distribution': category_distribution,
                 'wrong_distribution': wrong_distribution,
+                'source_distribution': source_distribution,
+                'year_distribution': year_distribution,
             }
     finally:
         connection.close()

@@ -444,6 +444,11 @@ def _seed_agents(cursor) -> None:
          '你是 AI 训练教练。分析用户提交历史识别薄弱题型和易错类别。生成 7 天训练计划，每天推荐 3-5 道针对弱项的题目。报告包含正确率趋势、耗时分布和知识点热力图描述。',
          '请分析我的训练数据并生成个性化学习计划。\n\n{% if submission_history %}\n## 提交历史\n{{ submission_history }}\n{% endif %}',
          'gpt-4.1-mini', 0.3, 2048, 10, 5),
+
+        (6, 'problem-generator', 'AI 生题 Agent', '根据参考题目用 AI 生成一道同类型但场景不同的全新题目',
+         '你是算法竞赛命题专家。根据参考题目生成一道**同类型但场景不同**的算法题。保持相同难度和题型分类，变换故事背景、数值和具体条件，但核心算法思想一致。\n\n严格按以下 JSON 格式输出，不要带 ```json 标记或其他额外内容：\n{"title":"...","statement_markdown":"...","examples":[{"input":"...","output":"...","explanation":"..."}],"tags":["..."]}',
+         '## 参考题目\n- 标题：{{ problem.title }}\n- 题型：{{ problem.category_slug }}\n- 难度：{{ problem.difficulty }}\n- 公司：{{ problem.company }}\n- 岗位：{{ problem.position }}\n- 年度：{{ problem.year }}\n\n## 原题描述\n{{ problem.statement_markdown }}\n\n{% if original_examples %}\n## 原题样例\n{% for ex in original_examples %}\n- 输入：{{ ex.input }}\n- 输出：{{ ex.output }}\n{% if ex.explanation %}- 解释：{{ ex.explanation }}{% endif %}\n{% endfor %}\n{% endif %}',
+         'qwen3.6-plus', 0.7, 4096, 1, 6),
     ]
     for agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort in _AGENTS:
         cursor.execute(
@@ -491,6 +496,9 @@ def _seed_agents(cursor) -> None:
         (12, 'recommend_daily_problems', '每日推荐', '推荐今日练习题',
          '{"type":"object","properties":{"count":{"type":"integer","default":5}},"required":[]}',
          'python_function', '{"module":"services.agent.builtin_tools","function":"recommend_daily_problems"}'),
+        (13, 'generate_similar_problem', '生成相似题目', '根据题目 ID 用 AI 生成一道同类型的全新题目',
+         '{"type":"object","properties":{"problem_id":{"type":"integer","description":"参照题目的 ID"}},"required":["problem_id"]}',
+         'python_function', '{"module":"services.agent.builtin_tools","function":"generate_similar_problem"}'),
     ]
     for tool_id, slug, name, desc, schema, htype, hconfig in _TOOLS:
         cursor.execute(
