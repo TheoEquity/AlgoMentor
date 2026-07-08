@@ -8,6 +8,7 @@ from api.routes.review import router as review_router
 from api.routes.submissions import router as submissions_router
 from api.routes.system import router as system_router
 from api.routes.training import router as training_router
+from api.routes.training_plan import router as training_plan_router
 
 api_router = APIRouter()
 api_router.include_router(system_router)
@@ -18,3 +19,4 @@ api_router.include_router(problems_router)
 api_router.include_router(review_router)
 api_router.include_router(submissions_router)
 api_router.include_router(training_router)
+api_router.include_router(training_plan_router)

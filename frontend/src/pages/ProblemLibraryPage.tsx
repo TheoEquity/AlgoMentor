@@ -544,7 +544,7 @@ export function ProblemLibraryPage({ onOpenProblem, onCreateProblem }: ProblemLi
                       <div>
                         <strong>{problem.title}</strong>
                         <div>
-                          <span>{problem.id}</span>
+                          <span>{problem.id}{problem.source_problem_id ? <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>（原题 {problem.source_problem_id}）</span> : null}</span>
                         </div>
                       </div>
                     </div>

@@ -13,18 +13,23 @@ import { ProblemLibraryPage } from './pages/ProblemLibraryPage'
 import { ProblemOverviewPage } from './pages/ProblemOverviewPage'
 import { ReviewCenterPage } from './pages/ReviewCenterPage'
 import { SystemSettingsPage } from './pages/SystemSettingsPage'
-import { TrainingCenterPage } from './pages/TrainingCenterPage'
+import { TrainingPlanListPage } from './pages/TrainingPlanListPage'
+import { TrainingPlanCreatePage } from './pages/TrainingPlanCreatePage'
+import { TrainingPlanDetailPage } from './pages/TrainingPlanDetailPage'
 import { ChatPage } from './pages/ChatPage'
 import type { ProblemDetail } from './types/problem'
 import type { ProblemCategory } from './types/problemCategory'
 
 type ProblemMode = 'overview' | 'training'
+type TrainingView = 'list' | 'create' | 'plan-detail'
 
 type AppRouteState = {
   activeNav: NavigationKey
   selectedProblemId: number | null
   problemMode: ProblemMode
   chatProblemId: number | null
+  trainingView: TrainingView
+  selectedPlanId: number | null
 }
 
 function readRouteFromLocation(): AppRouteState {
@@ -38,11 +43,13 @@ function readRouteFromLocation(): AppRouteState {
       selectedProblemId: Number(problemMatch[1]),
       problemMode: problemMatch[2] === 'training' ? 'training' : 'overview',
       chatProblemId: null,
+      trainingView: 'list',
+      selectedPlanId: null,
     }
   }
 
   if (pathname === '/' || pathname === '/dashboard') {
-    return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+    return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
   }
 
   const chatProblemId = searchParams.get('problem_id')
@@ -52,22 +59,33 @@ function readRouteFromLocation(): AppRouteState {
       selectedProblemId: null,
       problemMode: 'overview',
       chatProblemId: chatProblemId ? Number(chatProblemId) : null,
+      trainingView: 'list',
+      selectedPlanId: null,
     }
   }
 
   if (pathname === '/training') {
-    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
+  if (pathname === '/training/create') {
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null }
+  }
+
+  const planMatch = pathname.match(/^\/training\/plans\/(\d+)$/)
+  if (planMatch) {
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: Number(planMatch[1]) }
   }
 
   if (pathname === '/review') {
-    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
   }
 
   if (pathname === '/system') {
-    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
   }
 
-  return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null }
+  return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
 }
 
 function buildRoutePath(route: AppRouteState): string {
@@ -79,6 +97,12 @@ function buildRoutePath(route: AppRouteState): string {
 
   if (route.activeNav === 'chat' && route.chatProblemId !== null) {
     return `/chat?problem_id=${route.chatProblemId}`
+  }
+
+  if (route.activeNav === 'training') {
+    if (route.trainingView === 'create') return '/training/create'
+    if (route.trainingView === 'plan-detail' && route.selectedPlanId !== null) return `/training/plans/${route.selectedPlanId}`
+    return '/training'
   }
 
   return route.activeNav === 'dashboard' ? '/dashboard' : route.activeNav === 'library' ? '/library' : `/${route.activeNav}`
@@ -97,6 +121,8 @@ function App() {
   const [hintsRefreshSeed, setHintsRefreshSeed] = useState(0)
   const [sidebarHints, setSidebarHints] = useState<Partial<Record<NavigationKey, string>>>({})
   const [chatProblemId, setChatProblemId] = useState<number | null>(initialRoute.chatProblemId)
+  const [trainingView, setTrainingView] = useState<TrainingView>(initialRoute.trainingView)
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(initialRoute.selectedPlanId)
 
   useEffect(() => {
     if (createPageOpen) {
@@ -167,6 +193,8 @@ function App() {
       setActiveNav(route.activeNav)
       setSelectedProblemId(route.selectedProblemId)
       setProblemMode(route.problemMode)
+      setTrainingView(route.trainingView)
+      setSelectedPlanId(route.selectedPlanId)
       setProblemReloadSeed(0)
     }
 
@@ -183,6 +211,8 @@ function App() {
     setSelectedProblemId(route.selectedProblemId)
     setProblemMode(route.problemMode)
     setChatProblemId(route.chatProblemId)
+    setTrainingView(route.trainingView)
+    setSelectedPlanId(route.selectedPlanId)
     setProblemReloadSeed(0)
   }
 
@@ -192,7 +222,7 @@ function App() {
   }
 
   const handleNavigate = (next: NavigationKey) => {
-    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview', chatProblemId: null })
+    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })
   }
 
   return (
@@ -249,11 +279,21 @@ function App() {
         <DashboardPage />
       ) : activeNav === 'chat' ? (
         <ChatPage problemId={chatProblemId} />
+      ) : activeNav === 'training' && trainingView === 'create' ? (
+        <TrainingPlanCreatePage
+          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+          onPlanCreated={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+        />
+      ) : activeNav === 'training' && trainingView === 'plan-detail' && selectedPlanId !== null ? (
+        <TrainingPlanDetailPage
+          planId={selectedPlanId}
+          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+          onStartTraining={(problemId) => navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+        />
       ) : activeNav === 'training' ? (
-        <TrainingCenterPage
-          onOpenProblem={(problemId) => {
-            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training' })
-          }}
+        <TrainingPlanListPage
+          onCreatePlan={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null })}
+          onOpenPlan={(planId) => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: planId })}
         />
       ) : activeNav === 'review' ? (
         <ReviewCenterPage

@@ -927,6 +927,72 @@ ALTER TABLE ONLY public.submissions
 
 
 --
+-- Name: training_plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.training_plans (
+    id integer NOT NULL,
+    name text NOT NULL,
+    plan_type text DEFAULT 'comprehensive'::text NOT NULL,
+    duration_days integer DEFAULT 7 NOT NULL,
+    total_problems integer DEFAULT 0 NOT NULL,
+    completed_count integer DEFAULT 0 NOT NULL,
+    correct_count integer DEFAULT 0 NOT NULL,
+    created_at text NOT NULL,
+    updated_at text NOT NULL
+);
+
+ALTER TABLE public.training_plans OWNER TO bytehunter;
+
+CREATE SEQUENCE public.training_plans_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.training_plans_id_seq OWNED BY public.training_plans.id;
+
+ALTER TABLE ONLY public.training_plans ALTER COLUMN id SET DEFAULT nextval('public.training_plans_id_seq'::regclass);
+
+--
+-- Name: training_plan_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.training_plan_items (
+    id integer NOT NULL,
+    plan_id integer NOT NULL,
+    problem_id integer NOT NULL,
+    sort_order integer DEFAULT 1 NOT NULL,
+    status text DEFAULT '未开始'::text NOT NULL
+);
+
+ALTER TABLE public.training_plan_items OWNER TO bytehunter;
+
+CREATE SEQUENCE public.training_plan_items_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.training_plan_items_id_seq OWNED BY public.training_plan_items.id;
+
+ALTER TABLE ONLY public.training_plan_items ALTER COLUMN id SET DEFAULT nextval('public.training_plan_items_id_seq'::regclass);
+
+ALTER TABLE ONLY public.training_plan_items
+    ADD CONSTRAINT training_plan_items_plan_id_problem_id_key UNIQUE (plan_id, problem_id);
+
+ALTER TABLE ONLY public.training_plan_items
+    ADD CONSTRAINT training_plan_items_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.training_plans(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.training_plan_items
+    ADD CONSTRAINT training_plan_items_problem_id_fkey FOREIGN KEY (problem_id) REFERENCES public.problems(id) ON DELETE CASCADE;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
