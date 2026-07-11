@@ -31,6 +31,7 @@ export function PositionExtractPage() {
   const [error, setError] = useState('')
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailData, setDetailData] = useState<Record<string, string> | null>(null)
+  const [detailError, setDetailError] = useState('')
   const [showDetail, setShowDetail] = useState(false)
   const detailCache = useRef<Map<number, Record<string, string>>>(new Map())
 
@@ -105,8 +106,10 @@ export function PositionExtractPage() {
   const handleShowDetail = async (row: ExtractedPosition) => {
     if (!siteId) return
     setShowDetail(true)
+    setDetailError('')
     const cached = detailCache.current.get(row.source_position_id)
     if (cached) {
+      setDetailLoading(false)
       setDetailData(cached)
       return
     }
@@ -117,11 +120,10 @@ export function PositionExtractPage() {
       const dataObj = data as unknown as Record<string, string>
       detailCache.current.set(row.source_position_id, dataObj)
       setDetailData(dataObj)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '获取详情失败')
-      setShowDetail(false)
-    } finally {
       setDetailLoading(false)
+    } catch (err: unknown) {
+      setDetailLoading(false)
+      setDetailError(err instanceof Error ? err.message : '获取详情失败')
     }
   }
 
@@ -297,7 +299,7 @@ export function PositionExtractPage() {
                 )}
               </div>
             ) : (
-              <p style={{ color: '#ef4444' }}>加载失败</p>
+              <p style={{ color: '#ef4444' }}>{detailError || '加载失败'}</p>
             )}
           </div>
         </div>

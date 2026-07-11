@@ -113,5 +113,8 @@ async def fetch_detail(
             return cached
 
     browser_settings = _get_browser_settings()
-    detail = await fetch_position_detail(site.company_name, site.url, payload.title, payload.company, browser_settings)
+    try:
+        detail = await fetch_position_detail(site.company_name, site.url, payload.title, payload.company, browser_settings)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f'详情抓取失败: {str(e)[:200]}')
     return detail
