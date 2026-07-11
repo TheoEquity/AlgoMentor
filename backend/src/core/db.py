@@ -119,6 +119,8 @@ def initialize_database(database_url: str) -> None:
                 notes TEXT,
                 industry_category TEXT DEFAULT '',
                 referral_code TEXT DEFAULT '',
+                account TEXT NOT NULL DEFAULT '',
+                password TEXT NOT NULL DEFAULT '',
                 last_scraped_at TEXT,
                 scrape_status TEXT NOT NULL DEFAULT 'idle',
                 scrape_error TEXT,
