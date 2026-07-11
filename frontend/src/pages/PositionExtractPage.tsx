@@ -47,6 +47,11 @@ export function PositionExtractPage() {
 
   const handleExtract = async () => {
     if (!siteId || !resumeId) { setError('请选择官网和简历'); return }
+    const site = sites.find(s => s.id === siteId)
+    if (site && site.position_count === 0) {
+      setError('该官网暂无岗位数据，请先在「官网管理」中抓取岗位信息')
+      return
+    }
     setError('')
     setExtracting(true)
     setResults([])
