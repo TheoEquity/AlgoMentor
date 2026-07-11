@@ -121,9 +121,9 @@ export function WebsiteManagementPage() {
               <th style={{ width: 110 }}>行业类别</th>
               <th style={{ width: 140 }}>公司名称</th>
               <th>校招官网</th>
-              <th style={{ width: 130 }}>内推码</th>
-              <th style={{ width: 100 }}>账号</th>
-              <th style={{ width: 100 }}>密码</th>
+              <th style={{ width: 100 }}>内推码</th>
+              <th style={{ width: 90 }}>账号</th>
+              <th style={{ width: 90 }}>密码</th>
               <th style={{ width: 140 }}>操作</th>
             </tr>
           </thead>
@@ -166,7 +166,7 @@ export function WebsiteManagementPage() {
                     value={edit.referral_code}
                     onChange={(e) => setEdit((p) => ({ ...p, referral_code: e.target.value }))}
                     onKeyDown={handleKeyDown}
-                    placeholder="内推码"
+                    placeholder="选填"
                     style={{ width: '100%' }}
                   />
                 </td>
@@ -175,7 +175,7 @@ export function WebsiteManagementPage() {
                     value={edit.account}
                     onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))}
                     onKeyDown={handleKeyDown}
-                    placeholder="账号"
+                    placeholder="选填"
                     style={{ width: '100%' }}
                   />
                 </td>
@@ -184,7 +184,7 @@ export function WebsiteManagementPage() {
                     value={edit.password}
                     onChange={(e) => setEdit((p) => ({ ...p, password: e.target.value }))}
                     onKeyDown={handleKeyDown}
-                    placeholder="密码"
+                    placeholder="选填"
                     style={{ width: '100%' }}
                   />
                 </td>
@@ -240,6 +240,7 @@ export function WebsiteManagementPage() {
                         value={edit.referral_code}
                         onChange={(e) => setEdit((p) => ({ ...p, referral_code: e.target.value }))}
                         onKeyDown={handleKeyDown}
+                        placeholder="选填"
                         style={{ width: '100%' }}
                       />
                     </td>
@@ -248,6 +249,7 @@ export function WebsiteManagementPage() {
                         value={edit.account}
                         onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))}
                         onKeyDown={handleKeyDown}
+                        placeholder="选填"
                         style={{ width: '100%' }}
                       />
                     </td>
@@ -256,6 +258,7 @@ export function WebsiteManagementPage() {
                         value={edit.password}
                         onChange={(e) => setEdit((p) => ({ ...p, password: e.target.value }))}
                         onKeyDown={handleKeyDown}
+                        placeholder="选填"
                         style={{ width: '100%' }}
                       />
                     </td>
@@ -275,9 +278,9 @@ export function WebsiteManagementPage() {
                     <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <a href={site.url} target="_blank" rel="noreferrer" className="link">{site.url}</a>
                     </td>
-                    <td>{site.referral_code || '-'}</td>
-                    <td>{site.account || '-'}</td>
-                    <td>{site.password || '-'}</td>
+                    <td>{site.referral_code || ''}</td>
+                    <td>{site.account || ''}</td>
+                    <td>{site.password || ''}</td>
                     <td>
                       <button className="button small ghost" onClick={() => startEdit(site)}>编辑</button>
                       <button className="button small ghost danger" onClick={() => handleDelete(site.id)}>删除</button>
