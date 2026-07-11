@@ -141,6 +141,7 @@ export function PositionExtractPage() {
   }
 
   const positionType = resumeDetail?.position_type || ''
+  const positionCategory = resumeDetail?.position_category || ''
   const positionKeywords = resumeDetail?.position_keywords || []
 
   const hasResults = results.length > 0
@@ -176,19 +177,18 @@ export function PositionExtractPage() {
             <span>选择简历</span>
             <select value={resumeId ?? ''} onChange={(e) => setResumeId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">请选择</option>
-              {resumeList.map((r) => {
-                const kws = (r.position_keywords || [])
-                return (
-                  <option key={r.id} value={r.id}>
-                    {r.name || `简历 #${r.id}`}{kws.length > 0 ? ` [${kws.slice(0, 3).join('、')}]` : ''}
-                  </option>
-                )
-              })}
+              {resumeList.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name || `简历 #${r.id}`}</option>
+                ))}
             </select>
           </label>
           <label className="field" style={{ flex: '1 1 130px' }}>
             <span>岗位性质</span>
             <input value={positionType} readOnly placeholder="自动带出" />
+          </label>
+          <label className="field" style={{ flex: '1 1 130px' }}>
+            <span>岗位类别</span>
+            <input value={positionCategory} readOnly placeholder="自动带出" />
           </label>
           <label className="field" style={{ flex: '1 1 180px' }}>
             <span>岗位关键词</span>
