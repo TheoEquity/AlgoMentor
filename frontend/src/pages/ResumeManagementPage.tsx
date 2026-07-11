@@ -9,7 +9,7 @@ import type {
   LanguageRecord,
 } from '../types/resume'
 
-const POSITION_TYPES = ['2027秋招', '2027春招', '2026补录', '日常实习', '暑期实习']
+const POSITION_TYPES = ['校招', '实习']
 
 const emptyInfo = (): ResumeExtractedInfo => ({
   name: '',
