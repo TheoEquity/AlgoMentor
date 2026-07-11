@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 
-import { getLLMSettings, updateLLMSettings } from '../lib/llmSettingsApi'
+import { getLLMSettings, updateLLMSettings, getBrowserSettings, updateBrowserSettings } from '../lib/llmSettingsApi'
 import { createCompany, deleteCompany, listCompanies } from '../lib/companyApi'
 import { createCategory, deleteCategory, listCategories, updateCategory } from '../lib/categoryApi'
 import { listAgents, updateAgent, listTools, listSkills } from '../lib/agentApi'
-import type { LLMProvider, LLMSettingsPayload } from '../types/llmSettings'
+import { createIndustryCategory, deleteIndustryCategory, listIndustryCategories, updateIndustryCategory } from '../lib/websiteApi'
+import type { LLMProvider, LLMSettingsPayload, BrowserSettingsPayload } from '../types/llmSettings'
 import type { AgentConfig, ToolConfig, SkillConfig } from '../types/agent'
+import type { IndustryCategory } from '../types/website'
 
 const defaultForm: LLMSettingsPayload = {
   provider: 'OpenAI Compatible',
@@ -14,6 +16,8 @@ const defaultForm: LLMSettingsPayload = {
   vision_model: 'gpt-4.1-mini',
   attribution_model: 'gpt-4.1-mini',
   review_model: 'gpt-4.1-mini',
+  resume_model: 'gpt-4.1-mini',
+  scraping_model: 'gpt-4.1-mini',
   solution_temperature: 0.2,
   attribution_temperature: 0.1,
   review_temperature: 0.3,
@@ -23,7 +27,7 @@ const defaultForm: LLMSettingsPayload = {
 }
 
 export function SystemSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'llm' | 'agent' | 'company' | 'category'>('llm')
+  const [activeTab, setActiveTab] = useState<'llm' | 'agent' | 'company' | 'category' | 'browser' | 'industry'>('llm')
 
   return (
     <section className="settings-layout">
@@ -63,12 +67,28 @@ export function SystemSettingsPage() {
         >
           题型配置
         </button>
+        <button
+          type="button"
+          className={`tab-item${activeTab === 'browser' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('browser')}
+        >
+          浏览器配置
+        </button>
+        <button
+          type="button"
+          className={`tab-item${activeTab === 'industry' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('industry')}
+        >
+          行业类别
+        </button>
       </nav>
 
       {activeTab === 'llm' && <LLMConfigTab />}
       {activeTab === 'agent' && <AgentConfigTab />}
       {activeTab === 'company' && <CompanyConfigTab />}
       {activeTab === 'category' && <CategoryConfigTab />}
+      {activeTab === 'browser' && <BrowserConfigTab />}
+      {activeTab === 'industry' && <IndustryCategoryTab />}
     </section>
   )
 }
@@ -97,6 +117,8 @@ function LLMConfigTab() {
         vision_model: settings.vision_model,
         attribution_model: settings.attribution_model,
         review_model: settings.review_model,
+        resume_model: settings.resume_model,
+        scraping_model: settings.scraping_model,
         solution_temperature: settings.solution_temperature,
         attribution_temperature: settings.attribution_temperature,
         review_temperature: settings.review_temperature,
@@ -311,13 +333,35 @@ function LLMConfigTab() {
                 }
               />
             </label>
-          </div>
-        </section>
 
-        <section className="detail-card settings-card settings-card-full">
-          <h2>温度参数</h2>
+            <label className="settings-field">
+              <span>简历解析模型</span>
+              <input
+                type="text"
+                value={form.resume_model}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    resume_model: event.target.value,
+                  }))
+                }
+              />
+            </label>
 
-          <div className="settings-form-grid">
+            <label className="settings-field">
+              <span>抓取分类模型</span>
+              <input
+                type="text"
+                value={form.scraping_model}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    scraping_model: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
             <label className="settings-field">
               <span>解题分析 Temperature</span>
               <input
@@ -864,67 +908,51 @@ function AgentConfigTab() {
 
       {editingAgent && (
         <div className="modal-overlay" onClick={() => setEditingAgent(null)}>
-          <div className="modal-content agent-edit-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>编辑 Agent: {editingAgent.slug}</h2>
-              <button type="button" className="button ghost" onClick={() => setEditingAgent(null)}>X</button>
-            </div>
+          <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
+            <h3>编辑 Agent: {editingAgent.name}</h3>
 
-            <div className="agent-edit-body">
-              <div className="settings-form-grid">
-                <label className="settings-field">
-                  <span>名称</span>
-                  <input type="text" value={editingAgent.name} onChange={(e) => updateEditField('name', e.target.value)} />
-                </label>
-                <label className="settings-field">
-                  <span>模型</span>
-                  <input type="text" value={editingAgent.model} onChange={(e) => updateEditField('model', e.target.value)} />
-                </label>
-                <label className="settings-field">
-                  <span>温度 ({editingAgent.temperature})</span>
-                  <input type="range" min="0" max="2" step="0.1" value={editingAgent.temperature} onChange={(e) => updateEditField('temperature', parseFloat(e.target.value))} />
-                </label>
-                <label className="settings-field">
-                  <span>最大迭代</span>
-                  <input type="number" min={1} max={50} value={editingAgent.max_iterations} onChange={(e) => updateEditField('max_iterations', parseInt(e.target.value, 10))} />
-                </label>
-                <label className="settings-field settings-field-full">
-                  <span>描述</span>
-                  <input type="text" value={editingAgent.description} onChange={(e) => updateEditField('description', e.target.value)} />
-                </label>
-                <label className="settings-field settings-field-full">
-                  <span>系统提示词</span>
-                  <textarea rows={6} value={editingAgent.system_prompt} onChange={(e) => updateEditField('system_prompt', e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }} />
-                </label>
-                <label className="settings-field settings-field-full">
-                  <span>用户提示模板 (Jinja2)</span>
-                  <textarea rows={4} value={editingAgent.user_prompt_template} onChange={(e) => updateEditField('user_prompt_template', e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }} />
-                </label>
-              </div>
+            <div className="settings-form-grid">
+              <label className="settings-field">
+                <span>启用</span>
+                <select
+                  value={editingAgent.is_enabled ? '1' : '0'}
+                  onChange={(e) => setEditingAgent((prev) => prev ? { ...prev, is_enabled: e.target.value === '1' } : null)}
+                >
+                  <option value="1">是</option>
+                  <option value="0">否</option>
+                </select>
+              </label>
 
-              <div className="agent-edit-section">
-                <h3>工具 ({editingAgent.tools.length}/{tools.length})</h3>
-                <div className="agent-checkbox-grid">
-                  {tools.map((tool) => (
-                    <label key={tool.id} className="agent-checkbox-item">
-                      <input type="checkbox" checked={editingAgent.tools.some((t) => t.id === tool.id)} onChange={() => toggleToolId(tool.id)} />
-                      <span title={tool.description}>{tool.name} <small>({tool.slug})</small></span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <label className="settings-field">
+                <span>模型</span>
+                <input
+                  type="text"
+                  value={editingAgent.model}
+                  onChange={(e) => setEditingAgent((prev) => prev ? { ...prev, model: e.target.value } : null)}
+                />
+              </label>
 
-              <div className="agent-edit-section">
-                <h3>技能 ({editingAgent.skills.length}/{skills.length})</h3>
-                <div className="agent-checkbox-grid">
-                  {skills.map((skill) => (
-                    <label key={skill.id} className="agent-checkbox-item">
-                      <input type="checkbox" checked={editingAgent.skills.some((s) => s.id === skill.id)} onChange={() => toggleSkillId(skill.id)} />
-                      <span title={skill.description}>{skill.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <label className="settings-field">
+                <span>Temperature</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={2}
+                  value={editingAgent.temperature}
+                  onChange={(e) => setEditingAgent((prev) => prev ? { ...prev, temperature: Number(e.target.value) } : null)}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span>最大 Tokens</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingAgent.max_tokens}
+                  onChange={(e) => setEditingAgent((prev) => prev ? { ...prev, max_tokens: Number(e.target.value) } : null)}
+                />
+              </label>
             </div>
 
             <div className="modal-footer">
@@ -937,5 +965,288 @@ function AgentConfigTab() {
         </div>
       )}
     </>
+  )
+}
+
+function BrowserConfigTab() {
+  const [form, setForm] = useState<BrowserSettingsPayload>({
+    headless: true,
+    executable_path: '',
+    viewport_width: 1280,
+    viewport_height: 720,
+    timeout_seconds: 30,
+    user_data_dir: '',
+    proxy_url: '',
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const cancelled = { value: false }
+    setIsLoading(true)
+    getBrowserSettings()
+      .then((settings) => {
+        if (!cancelled.value) {
+          setForm({
+            headless: settings.headless,
+            executable_path: settings.executable_path,
+            viewport_width: settings.viewport_width,
+            viewport_height: settings.viewport_height,
+            timeout_seconds: settings.timeout_seconds,
+            user_data_dir: settings.user_data_dir,
+            proxy_url: settings.proxy_url,
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled.value) setIsLoading(false) })
+    return () => { cancelled.value = true }
+  }, [])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    setMessage('')
+    try {
+      await updateBrowserSettings(form)
+      setMessage('浏览器配置已保存')
+    } catch {
+      setMessage('保存失败')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (isLoading) {
+    return <div className="backend-note">加载中...</div>
+  }
+
+  return (
+    <div className="settings-card">
+      <h2>浏览器自动化配置</h2>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+        配置 Playwright / Browserbase 浏览器自动化抓取参数。
+      </p>
+
+      <div className="settings-form-grid">
+        <label className="settings-field">
+          <span>无头模式</span>
+          <select
+            value={form.headless ? '1' : '0'}
+            onChange={(e) => setForm((c) => ({ ...c, headless: e.target.value === '1' }))}
+          >
+            <option value="1">是</option>
+            <option value="0">否</option>
+          </select>
+        </label>
+        <label className="settings-field">
+          <span>浏览器可执行路径</span>
+          <input
+            type="text"
+            value={form.executable_path}
+            placeholder="留空自动检测"
+            onChange={(e) => setForm((c) => ({ ...c, executable_path: e.target.value }))}
+          />
+        </label>
+        <label className="settings-field">
+          <span>视口宽度</span>
+          <input
+            type="number"
+            value={form.viewport_width}
+            min={800}
+            max={3840}
+            onChange={(e) => setForm((c) => ({ ...c, viewport_width: Number(e.target.value) }))}
+          />
+        </label>
+        <label className="settings-field">
+          <span>视口高度</span>
+          <input
+            type="number"
+            value={form.viewport_height}
+            min={600}
+            max={2160}
+            onChange={(e) => setForm((c) => ({ ...c, viewport_height: Number(e.target.value) }))}
+          />
+        </label>
+        <label className="settings-field">
+          <span>超时秒数</span>
+          <input
+            type="number"
+            value={form.timeout_seconds}
+            min={5}
+            max={300}
+            onChange={(e) => setForm((c) => ({ ...c, timeout_seconds: Number(e.target.value) }))}
+          />
+        </label>
+        <label className="settings-field">
+          <span>用户数据目录</span>
+          <input
+            type="text"
+            value={form.user_data_dir}
+            placeholder="留空使用临时目录"
+            onChange={(e) => setForm((c) => ({ ...c, user_data_dir: e.target.value }))}
+          />
+        </label>
+        <label className="settings-field">
+          <span>代理 URL</span>
+          <input
+            type="text"
+            value={form.proxy_url}
+            placeholder="可选"
+            onChange={(e) => setForm((c) => ({ ...c, proxy_url: e.target.value }))}
+          />
+        </label>
+      </div>
+
+      <div className="settings-actions">
+        <button className="button primary" disabled={isSaving} onClick={() => { void handleSave() }}>
+          {isSaving ? '保存中...' : '保存配置'}
+        </button>
+      </div>
+
+      {message && (
+        <div className="backend-note success" style={{ marginTop: 12 }}>{message}</div>
+      )}
+    </div>
+  )
+}
+
+function IndustryCategoryTab() {
+  const [categories, setCategories] = useState<IndustryCategory[]>([])
+  const [newName, setNewName] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = () => { listIndustryCategories().then(setCategories).catch(() => {}) }
+  useEffect(() => { load() }, [])
+
+  const handleAdd = async () => {
+    const name = newName.trim()
+    if (!name) { setError('类别名称不能为空'); return }
+    setError('')
+    setIsSaving(true)
+    try {
+      await createIndustryCategory({ name })
+      setNewName('')
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '添加失败')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveEdit = async (id: number) => {
+    const name = editName.trim()
+    if (!name) { setError('类别名称不能为空'); return }
+    setError('')
+    setIsSaving(true)
+    try {
+      await updateIndustryCategory(id, { name })
+      setEditingId(null)
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('确定删除该行业类别吗？')) return
+    try {
+      await deleteIndustryCategory(id)
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
+  const startEdit = (cat: IndustryCategory) => {
+    setEditingId(cat.id)
+    setEditName(cat.name)
+    setError('')
+  }
+
+  return (
+    <div className="detail-card">
+      <h3>行业类别</h3>
+      <p className="hint" style={{ marginBottom: 12 }}>定义官网管理中使用的行业类别选项。</p>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="输入新类别名称"
+          style={{ flex: 1 }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
+        />
+        <button type="button" className="button primary" disabled={isSaving} onClick={() => { void handleAdd() }}>
+          添加
+        </button>
+      </div>
+
+      {error && <div className="error-msg" style={{ marginBottom: 8 }}>{error}</div>}
+
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th style={{ width: 60 }}>#</th>
+            <th>类别名称</th>
+            <th style={{ width: 140 }}>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {categories.length === 0 ? (
+            <tr>
+              <td colSpan={3} style={{ textAlign: 'center', padding: 24, color: '#6b7280' }}>
+                暂无行业类别，请在上方添加。
+              </td>
+            </tr>
+          ) : (
+            categories.map((cat) =>
+              editingId === cat.id ? (
+                <tr key={cat.id}>
+                  <td>{cat.id}</td>
+                  <td>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      style={{ width: '100%' }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleSaveEdit(cat.id) } }}
+                    />
+                  </td>
+                  <td>
+                    <button type="button" className="button primary" style={{ marginRight: 6 }} disabled={isSaving} onClick={() => { void handleSaveEdit(cat.id) }}>
+                      保存
+                    </button>
+                    <button type="button" className="button ghost" onClick={() => setEditingId(null)}>
+                      取消
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={cat.id}>
+                  <td>{cat.id}</td>
+                  <td>{cat.name}</td>
+                  <td>
+                    <button type="button" className="button ghost" onClick={() => startEdit(cat)}>
+                      编辑
+                    </button>
+                    <button type="button" className="button ghost" onClick={() => { void handleDelete(cat.id) }}>
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              ),
+            )
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }

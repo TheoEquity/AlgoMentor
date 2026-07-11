@@ -34,12 +34,15 @@ function normalizeDetail(detail: unknown): string {
 }
 
 export async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    headers: isFormData
+      ? { ...(init?.headers ?? {}) }
+      : {
+          'Content-Type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
   })
 
   if (!response.ok) {
@@ -52,6 +55,10 @@ export async function requestJSON<T>(path: string, init?: RequestInit): Promise<
     }
 
     throw new Error(detail || `请求失败，状态码 ${response.status}`)
+  }
+
+  if (response.status === 204) {
+    return undefined as unknown as T
   }
 
   return (await response.json()) as T

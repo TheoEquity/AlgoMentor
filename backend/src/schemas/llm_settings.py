@@ -17,6 +17,8 @@ class LLMSettingsBase(BaseModel):
     vision_model: str = Field(min_length=1, default='gpt-4.1-mini')
     attribution_model: str = Field(min_length=1, default='gpt-4.1-mini')
     review_model: str = Field(min_length=1, default='gpt-4.1-mini')
+    resume_model: str = Field(min_length=1, default='gpt-4.1-mini')
+    scraping_model: str = Field(min_length=1, default='gpt-4.1-mini')
     solution_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     attribution_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     review_temperature: float = Field(default=0.3, ge=0.0, le=2.0)

@@ -27,228 +27,28 @@ def initialize_database(database_url: str) -> None:
         ''')
 
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS problems (
+            CREATE TABLE IF NOT EXISTS candidate_positions (
                 id SERIAL PRIMARY KEY,
-                slug TEXT NOT NULL UNIQUE,
+                resume_id INTEGER REFERENCES resumes(id) ON DELETE SET NULL,
+                company_name TEXT NOT NULL,
                 title TEXT NOT NULL,
-                company TEXT NOT NULL,
-                difficulty TEXT NOT NULL,
-                category_slug TEXT NOT NULL DEFAULT '',
-                statement_markdown TEXT NOT NULL,
-                constraints_text TEXT NOT NULL,
-                tags_json TEXT NOT NULL,
-                examples_json TEXT NOT NULL,
-                supported_languages_json TEXT NOT NULL,
-                starter_templates_json TEXT NOT NULL,
-                source_type TEXT,
-                source TEXT NOT NULL DEFAULT '手工',
-                frequency TEXT NOT NULL DEFAULT '中',
-                year INTEGER,
-                source_ref TEXT,
-                external_id TEXT,
-                status TEXT NOT NULL DEFAULT '未开始',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS problem_test_cases (
-                id SERIAL PRIMARY KEY,
-                problem_id INTEGER NOT NULL REFERENCES problems(id),
-                case_type TEXT NOT NULL,
-                stdin_text TEXT NOT NULL,
-                expected_output_text TEXT NOT NULL,
-                sort_order INTEGER NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS submissions (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                problem_id INTEGER NOT NULL REFERENCES problems(id),
-                language TEXT NOT NULL,
-                run_type TEXT NOT NULL,
-                code_text TEXT NOT NULL,
-                custom_input TEXT NOT NULL DEFAULT '',
-                verdict TEXT NOT NULL,
-                runtime_ms INTEGER NOT NULL DEFAULT 0,
-                memory_kb INTEGER NOT NULL DEFAULT 0,
-                compiler_output TEXT NOT NULL DEFAULT '',
-                stderr_output TEXT NOT NULL DEFAULT '',
-                failed_case_index INTEGER,
-                failed_input TEXT,
-                failed_expected_output TEXT,
-                failed_actual_output TEXT,
-                case_results_json TEXT NOT NULL DEFAULT '[]',
-                judge_token TEXT,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS error_attributions (
-                id SERIAL PRIMARY KEY,
-                submission_id INTEGER NOT NULL REFERENCES submissions(id),
-                analysis_type TEXT NOT NULL,
-                primary_category TEXT NOT NULL DEFAULT '',
-                secondary_category TEXT NOT NULL DEFAULT '',
-                summary TEXT NOT NULL DEFAULT '',
-                suggestion TEXT NOT NULL DEFAULT '',
-                bullets_json TEXT NOT NULL DEFAULT '[]',
-                line_refs_json TEXT NOT NULL DEFAULT '[]',
-                execution_status TEXT NOT NULL DEFAULT 'completed',
-                status_reason TEXT NOT NULL DEFAULT '',
-                provider TEXT NOT NULL DEFAULT '',
-                model TEXT NOT NULL DEFAULT '',
-                endpoint_url TEXT NOT NULL DEFAULT '',
-                raw_response_json TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS llm_settings (
-                id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-                provider TEXT NOT NULL,
-                endpoint_url TEXT NOT NULL,
-                solution_model TEXT NOT NULL,
-                vision_model TEXT NOT NULL,
-                attribution_model TEXT NOT NULL,
-                review_model TEXT NOT NULL,
-                solution_temperature REAL NOT NULL,
-                attribution_temperature REAL NOT NULL,
-                review_temperature REAL NOT NULL,
-                api_key_secret TEXT NOT NULL DEFAULT '',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                updated_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS companies (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                name_en TEXT NOT NULL DEFAULT '',
-                abbreviation TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS problem_categories (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                slug TEXT NOT NULL UNIQUE,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_agents (
-                id SERIAL PRIMARY KEY,
-                slug VARCHAR(64) UNIQUE NOT NULL,
-                name VARCHAR(128) NOT NULL,
+                location TEXT DEFAULT '',
                 description TEXT DEFAULT '',
-                icon VARCHAR(32) DEFAULT 'bot',
-                system_prompt TEXT NOT NULL DEFAULT '',
-                user_prompt_template TEXT NOT NULL DEFAULT '',
-                model VARCHAR(128) NOT NULL DEFAULT 'gpt-4.1-mini',
-                temperature REAL NOT NULL DEFAULT 0.2,
-                max_tokens INTEGER NOT NULL DEFAULT 2048,
-                max_iterations INTEGER NOT NULL DEFAULT 10,
-                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                sort_order INTEGER NOT NULL DEFAULT 0,
+                apply_url TEXT DEFAULT '',
+                degree_requirement TEXT DEFAULT '',
+                match_score INTEGER DEFAULT 0,
+                match_reason TEXT DEFAULT '',
+                source_type TEXT NOT NULL DEFAULT 'manual',
+                site_id INTEGER REFERENCES career_sites(id) ON DELETE SET NULL,
+                source_position_id INTEGER DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'candidate',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         ''')
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_tools (
-                id SERIAL PRIMARY KEY,
-                slug VARCHAR(64) UNIQUE NOT NULL,
-                name VARCHAR(128) NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                parameters_schema JSONB NOT NULL DEFAULT '{}',
-                handler_type VARCHAR(32) NOT NULL DEFAULT 'python_function',
-                handler_config JSONB NOT NULL DEFAULT '{}',
-                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_skills (
-                id SERIAL PRIMARY KEY,
-                slug VARCHAR(64) UNIQUE NOT NULL,
-                name VARCHAR(128) NOT NULL,
-                description TEXT DEFAULT '',
-                prompt_text TEXT NOT NULL,
-                is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_agent_tools (
-                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
-                tool_id INTEGER NOT NULL REFERENCES ai_tools(id),
-                PRIMARY KEY (agent_id, tool_id)
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_agent_skills (
-                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
-                skill_id INTEGER NOT NULL REFERENCES ai_skills(id),
-                PRIMARY KEY (agent_id, skill_id)
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_chat_sessions (
-                id SERIAL PRIMARY KEY,
-                agent_id INTEGER NOT NULL REFERENCES ai_agents(id),
-                title VARCHAR(256) NOT NULL DEFAULT 'New Chat',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_chat_messages (
-                id SERIAL PRIMARY KEY,
-                session_id INTEGER NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
-                role VARCHAR(32) NOT NULL,
-                content TEXT NOT NULL,
-                tool_calls JSONB,
-                tool_results JSONB,
-                token_usage JSONB,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ai_usage_logs (
-                id SERIAL PRIMARY KEY,
-                agent_slug VARCHAR(64) NOT NULL,
-                model VARCHAR(128) NOT NULL,
-                prompt_tokens INTEGER NOT NULL DEFAULT 0,
-                completion_tokens INTEGER NOT NULL DEFAULT 0,
-                total_tokens INTEGER NOT NULL DEFAULT 0,
-                tool_calls_count INTEGER NOT NULL DEFAULT 0,
-                duration_ms INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            )
-        ''')
-
-        cursor.execute('SELECT COUNT(*) AS count FROM users')
-        if cursor.fetchone()['count'] == 0:
-            cursor.execute(
-                "INSERT INTO users (username, display_name, created_at) VALUES (%s, %s, %s)",
+        cursor.execute(
+                "INSERT INTO users (username, display_name, created_at) VALUES (%s, %s, %s) ON CONFLICT (username) DO NOTHING",
                 ('default', '默认用户', '2026-06-23T17:20:00Z'),
             )
 
@@ -275,6 +75,103 @@ def initialize_database(database_url: str) -> None:
         )
 
         cursor.execute(
+            "ALTER TABLE llm_settings ADD COLUMN IF NOT EXISTS resume_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'"
+        )
+        cursor.execute(
+            "ALTER TABLE llm_settings ADD COLUMN IF NOT EXISTS scraping_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'"
+        )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS browser_settings (
+                id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+                headless INTEGER NOT NULL DEFAULT 1,
+                executable_path TEXT NOT NULL DEFAULT '',
+                viewport_width INTEGER NOT NULL DEFAULT 1280,
+                viewport_height INTEGER NOT NULL DEFAULT 720,
+                timeout_seconds INTEGER NOT NULL DEFAULT 30,
+                user_data_dir TEXT NOT NULL DEFAULT '',
+                proxy_url TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS resumes (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                position_keywords TEXT NOT NULL DEFAULT '[]',
+                position_type TEXT NOT NULL DEFAULT '日常实习',
+                extracted_info TEXT,
+                extract_status TEXT NOT NULL DEFAULT 'pending',
+                extract_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS career_sites (
+                id SERIAL PRIMARY KEY,
+                company_name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                notes TEXT,
+                industry_category TEXT DEFAULT '',
+                referral_code TEXT DEFAULT '',
+                last_scraped_at TEXT,
+                scrape_status TEXT NOT NULL DEFAULT 'idle',
+                scrape_error TEXT,
+                position_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS recruitment_positions (
+                id SERIAL PRIMARY KEY,
+                site_id INTEGER NOT NULL REFERENCES career_sites(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                location TEXT,
+                degree_requirement TEXT,
+                description TEXT,
+                apply_url TEXT,
+                position_type TEXT NOT NULL DEFAULT '未分类',
+                status TEXT NOT NULL DEFAULT 'pending',
+                source_hash TEXT NOT NULL UNIQUE,
+                extracted_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS position_matches (
+                id SERIAL PRIMARY KEY,
+                position_id INTEGER NOT NULL REFERENCES recruitment_positions(id) ON DELETE CASCADE,
+                resume_id INTEGER NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
+                match_score INTEGER NOT NULL DEFAULT 0,
+                match_reason TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(position_id, resume_id)
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS job_applications (
+                id SERIAL PRIMARY KEY,
+                position_id INTEGER NOT NULL REFERENCES recruitment_positions(id) ON DELETE CASCADE,
+                resume_id INTEGER NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
+                status TEXT NOT NULL DEFAULT 'pending_apply',
+                applied_at TEXT,
+                feedback_at TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute(
             "UPDATE problems SET status = '未开始' WHERE status IN ('published', 'draft')"
         )
         cursor.execute(
@@ -287,6 +184,32 @@ def initialize_database(database_url: str) -> None:
             "ALTER TABLE problems ADD COLUMN IF NOT EXISTS position VARCHAR(64) DEFAULT ''"
         )
 
+        cursor.execute(
+            "ALTER TABLE career_sites ADD COLUMN IF NOT EXISTS industry_category TEXT DEFAULT ''"
+        )
+        cursor.execute(
+            "ALTER TABLE career_sites ADD COLUMN IF NOT EXISTS referral_code TEXT DEFAULT ''"
+        )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS industry_categories (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('SELECT COUNT(*) AS count FROM industry_categories')
+        if cursor.fetchone()['count'] == 0:
+            from datetime import UTC, datetime
+            now = datetime.now(UTC).isoformat()
+            for item in ['互联网/科技', '金融', '游戏', '芯片/半导体', '人工智能', '新能源/汽车', '医疗/生物', '消费品', '咨询', '教育', '其他']:
+                cursor.execute(
+                    "INSERT INTO industry_categories (name, sort_order, created_at) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+                    (item, 0, now),
+                )
+
         cursor.execute('SELECT COUNT(*) AS count FROM llm_settings')
         if cursor.fetchone()['count'] == 0:
             cursor.execute(
@@ -294,13 +217,16 @@ def initialize_database(database_url: str) -> None:
                 INSERT INTO llm_settings (
                     id, provider, endpoint_url,
                     solution_model, vision_model, attribution_model, review_model,
+                    resume_model, scraping_model,
                     solution_temperature, attribution_temperature, review_temperature,
                     api_key_secret, enabled, updated_at
-                ) VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''',
                 (
                     'OpenAI Compatible',
                     'https://api.openai.com/v1',
+                    'gpt-4.1-mini',
+                    'gpt-4.1-mini',
                     'gpt-4.1-mini',
                     'gpt-4.1-mini',
                     'gpt-4.1-mini',
@@ -314,6 +240,13 @@ def initialize_database(database_url: str) -> None:
                 ),
             )
 
+        cursor.execute('SELECT COUNT(*) AS count FROM browser_settings')
+        if cursor.fetchone()['count'] == 0:
+            cursor.execute(
+                '''INSERT INTO browser_settings (id, updated_at) VALUES (1, %s)''',
+                ('2026-07-09T00:00:00Z',),
+            )
+
         cursor.execute('SELECT COUNT(*) AS count FROM problem_categories')
         if cursor.fetchone()['count'] == 0:
             _seed_categories(cursor)
@@ -321,6 +254,8 @@ def initialize_database(database_url: str) -> None:
         cursor.execute('SELECT COUNT(*) AS count FROM ai_agents')
         if cursor.fetchone()['count'] == 0:
             _seed_agents(cursor)
+
+        _migrate_new_agents(cursor)
 
         cursor.execute('SELECT COUNT(*) AS count FROM problems')
         if cursor.fetchone()['count'] == 0:
@@ -449,6 +384,16 @@ def _seed_agents(cursor) -> None:
          '你是算法竞赛命题专家。根据参考题目生成一道**同类型但场景不同**的算法题。保持相同难度和题型分类，变换故事背景、数值和具体条件，但核心算法思想一致。\n\n严格按以下 JSON 格式输出，不要带 ```json 标记或其他额外内容：\n{"title":"...","statement_markdown":"...","examples":[{"input":"...","output":"...","explanation":"..."}],"tags":["..."]}',
          '## 参考题目\n- 标题：{{ problem.title }}\n- 题型：{{ problem.category_slug }}\n- 难度：{{ problem.difficulty }}\n- 公司：{{ problem.company }}\n- 岗位：{{ problem.position }}\n- 年度：{{ problem.year }}\n\n## 原题描述\n{{ problem.statement_markdown }}\n\n{% if original_examples %}\n## 原题样例\n{% for ex in original_examples %}\n- 输入：{{ ex.input }}\n- 输出：{{ ex.output }}\n{% if ex.explanation %}- 解释：{{ ex.explanation }}{% endif %}\n{% endfor %}\n{% endif %}',
          'qwen3.6-plus', 0.7, 4096, 1, 6),
+
+        (7, 'resume-parsing-agent', '简历解析 Agent', '从简历文本中提取结构化信息（教育、技能、经历等）',
+         '你是专业的简历信息提取引擎。忠实提取原文内容，不概括、不简化、不遗漏。技能/课程/荣誉/证书名称必须保持原文完整。经历和项目描述保留原文的量化数据和关键动词。日期格式统一为 "YYYY.MM" 或 "YYYY"。',
+         '从以下简历文本中提取结构化 JSON：\n\n{{ resume_text }}',
+         'gpt-4.1-mini', 0.1, 8192, 1, 7),
+
+        (8, 'position-matching-agent', '岗位匹配 Agent', '评估简历与岗位的匹配度并给出建议',
+         '你是校招岗位匹配专家。根据简历信息和岗位描述评估匹配度（0-100分）。评估维度包括学校层次匹配、专业相关度、技能匹配度、实习/项目经验相关性、地点偏好。',
+         '评估以下简历与岗位的匹配度并返回 JSON（score 0-100, reason 50字内）：\n\n简历：\n{{ resume_summary }}\n\n岗位：\n{{ position_description }}',
+         'gpt-4.1-mini', 0.1, 2048, 1, 8),
     ]
     for agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort in _AGENTS:
         cursor.execute(
@@ -540,4 +485,28 @@ def _seed_agents(cursor) -> None:
         cursor.execute(
             'INSERT INTO ai_agent_skills (agent_id, skill_id) VALUES (%s, %s)',
             (agent_id, skill_id),
+        )
+
+
+def _migrate_new_agents(cursor) -> None:
+    now = '2026-07-09T00:00:00Z'
+    _NEW_AGENTS = [
+        (7, 'resume-parsing-agent', '简历解析 Agent', '从简历文本中提取结构化信息（教育、技能、经历等）',
+         '你是专业的简历信息提取引擎。忠实提取原文内容，不概括、不简化、不遗漏。技能/课程/荣誉/证书名称必须保持原文完整。经历和项目描述保留原文的量化数据和关键动词。日期格式统一为 "YYYY.MM" 或 "YYYY"。',
+         '从以下简历文本中提取结构化 JSON：\n\n{{ resume_text }}',
+         'gpt-4.1-mini', 0.1, 8192, 1, 7),
+
+        (8, 'position-matching-agent', '岗位匹配 Agent', '评估简历与岗位的匹配度并给出建议',
+         '你是校招岗位匹配专家。根据简历信息和岗位描述评估匹配度（0-100分）。评估维度包括学校层次匹配、专业相关度、技能匹配度、实习/项目经验相关性、地点偏好。',
+         '评估以下简历与岗位的匹配度并返回 JSON（score 0-100, reason 50字内）：\n\n简历：\n{{ resume_summary }}\n\n岗位：\n{{ position_description }}',
+         'gpt-4.1-mini', 0.1, 2048, 1, 8),
+    ]
+    for agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort in _NEW_AGENTS:
+        cursor.execute(
+            '''INSERT INTO ai_agents (
+                id, slug, name, description, system_prompt, user_prompt_template,
+                model, temperature, max_tokens, max_iterations, sort_order, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING''',
+            (agent_id, slug, name, desc, system_prompt, user_template, model, temp, max_tok, max_iter, sort, now, now),
         )

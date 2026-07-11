@@ -8,6 +8,8 @@ export type LLMSettings = {
   vision_model: string
   attribution_model: string
   review_model: string
+  resume_model: string
+  scraping_model: string
   solution_temperature: number
   attribution_temperature: number
   review_temperature: number
@@ -21,3 +23,17 @@ export type LLMSettingsPayload = Omit<LLMSettings, 'id' | 'updated_at' | 'api_ke
   api_key?: string
   clear_api_key?: boolean
 }
+
+export type BrowserSettings = {
+  id: number
+  headless: boolean
+  executable_path: string
+  viewport_width: number
+  viewport_height: number
+  timeout_seconds: number
+  user_data_dir: string
+  proxy_url: string
+  updated_at: string
+}
+
+export type BrowserSettingsPayload = Omit<BrowserSettings, 'id' | 'updated_at'>

@@ -17,6 +17,11 @@ import { TrainingPlanListPage } from './pages/TrainingPlanListPage'
 import { TrainingPlanCreatePage } from './pages/TrainingPlanCreatePage'
 import { TrainingPlanDetailPage } from './pages/TrainingPlanDetailPage'
 import { ChatPage } from './pages/ChatPage'
+import { ResumeManagementPage } from './pages/ResumeManagementPage'
+import { WebsiteManagementPage } from './pages/WebsiteManagementPage'
+import { PositionManagementPage } from './pages/PositionManagementPage'
+import { PositionExtractPage } from './pages/PositionExtractPage'
+import { ApplicationTrackingPage } from './pages/ApplicationTrackingPage'
 import type { ProblemDetail } from './types/problem'
 import type { ProblemCategory } from './types/problemCategory'
 
@@ -85,6 +90,26 @@ function readRouteFromLocation(): AppRouteState {
     return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
   }
 
+  if (pathname === '/resume') {
+    return { activeNav: 'resume', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
+  if (pathname === '/website') {
+    return { activeNav: 'website', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
+  if (pathname === '/extract') {
+    return { activeNav: 'extract', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
+  if (pathname === '/position') {
+    return { activeNav: 'position', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
+  if (pathname === '/application') {
+    return { activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  }
+
   return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
 }
 
@@ -136,6 +161,11 @@ function App() {
       review: '复盘 - AlgoMentor',
       system: '系统管理 - AlgoMentor',
       chat: 'AI 对话 - AlgoMentor',
+      resume: '简历管理 - AlgoMentor',
+      website: '官网管理 - AlgoMentor',
+      extract: '岗位提取 - AlgoMentor',
+      position: '候选岗位 - AlgoMentor',
+      application: '投递管理 - AlgoMentor',
     }
     document.title = titles[activeNav]
   }, [activeNav, createPageOpen])
@@ -301,6 +331,16 @@ function App() {
             navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training' })
           }}
         />
+      ) : activeNav === 'resume' ? (
+        <ResumeManagementPage />
+      ) : activeNav === 'website' ? (
+        <WebsiteManagementPage />
+      ) : activeNav === 'extract' ? (
+        <PositionExtractPage />
+      ) : activeNav === 'position' ? (
+        <PositionManagementPage />
+      ) : activeNav === 'application' ? (
+        <ApplicationTrackingPage />
       ) : (
         <div className="backend-note">正在加载题目详情...</div>
       )}
