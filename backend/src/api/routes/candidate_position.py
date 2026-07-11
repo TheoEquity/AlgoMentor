@@ -105,6 +105,13 @@ async def extract_from_site(
     keywords = resume.position_keywords if resume.position_keywords else None
     positions = repo.get_pending_for_matching(payload.resume_id, site_id=payload.site_id, keywords=keywords, limit=100)
 
+    if keywords and len(positions) > 15:
+        def keyword_score(pos: dict) -> int:
+            title = pos.get('title', '').lower()
+            return sum(1 for kw in keywords if kw.lower() in title)
+        positions.sort(key=keyword_score, reverse=True)
+        positions = positions[:15]
+
     results: list[dict] = []
     for pos in positions:
         try:

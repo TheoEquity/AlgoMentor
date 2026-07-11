@@ -11,24 +11,30 @@ from repositories.llm_settings_repository import LLMSettingsRepository
 class RecruitmentLLMService:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
+        self._model_cache: dict[str, str] = {}
 
     def _get_llm_repo(self) -> LLMSettingsRepository:
         return LLMSettingsRepository(self.database_url)
 
-    async def _chat(self, prompt: str, max_tokens: int = 2048, model: str | None = None) -> str:
+    def _load_settings(self) -> dict:
         repo = self._get_llm_repo()
         settings_raw = repo.get_settings()
-
-        settings: dict = {}
         if hasattr(settings_raw, 'model_dump'):
-            settings = settings_raw.model_dump()
+            return settings_raw.model_dump()
         elif isinstance(settings_raw, dict):
-            settings = settings_raw
+            return settings_raw
+        return {}
+
+    async def _chat(self, prompt: str, max_tokens: int = 2048, model: str | None = None) -> str:
+        if not self._model_cache:
+            self._model_cache = self._load_settings()
+        settings = self._model_cache
 
         if not settings.get('enabled'):
             raise RuntimeError('LLM 未配置或未启用')
 
         base_url = (settings.get('endpoint_url') or '').rstrip('/')
+        repo = self._get_llm_repo()
         api_key = repo.get_api_key()
         if not api_key:
             raise RuntimeError('LLM API Key 未配置')
@@ -149,12 +155,7 @@ class RecruitmentLLMService:
         return json.loads(cleaned.strip())
 
     def _get_model(self, key: str) -> str | None:
-        from config import Settings
-        repo = LLMSettingsRepository(Settings().database_url)
-        settings_raw = repo.get_settings()
-        settings: dict = {}
-        if hasattr(settings_raw, 'model_dump'):
-            settings = settings_raw.model_dump()
-        elif isinstance(settings_raw, dict):
-            settings = settings_raw
-        return settings.get(key) or 'gpt-4.1-mini'
+        if key not in self._model_cache:
+            settings = self._load_settings()
+            self._model_cache = settings
+        return self._model_cache.get(key) or 'gpt-4.1-mini'
