@@ -18,6 +18,8 @@ export function createSite(payload: {
   notes: string
   industry_category: string
   referral_code: string
+  account?: string
+  password?: string
 }): Promise<CareerSite> {
   return requestJSON<CareerSite>(BASE, {
     method: 'POST',
@@ -33,6 +35,8 @@ export function updateSite(
     notes?: string
     industry_category?: string
     referral_code?: string
+    account?: string
+    password?: string
   },
 ): Promise<CareerSite> {
   return requestJSON<CareerSite>(`${BASE}/${siteId}`, {
@@ -68,8 +72,4 @@ export function updateIndustryCategory(
 
 export function deleteIndustryCategory(id: number): Promise<void> {
   return requestJSON(`${INDUSTRY_BASE}/${id}`, { method: 'DELETE' })
-}
-
-export function scrapeSite(siteId: number): Promise<{ status: string }> {
-  return requestJSON(`${BASE}/${siteId}/scrape`, { method: 'POST' })
 }
