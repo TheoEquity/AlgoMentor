@@ -51,6 +51,7 @@ export interface ResumeListItem {
   file_type: string
   position_keywords: string[]
   position_type: string
+  position_category: string
   extract_status: string
   created_at: string
 }

@@ -35,10 +35,11 @@ class WebsiteRepository:
         connection = get_connection(self.database_url)
         with connection, connection.cursor() as cursor:
             cursor.execute(
-                '''INSERT INTO career_sites (company_name, url, notes, industry_category, referral_code, created_at, updated_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                '''INSERT INTO career_sites (company_name, url, notes, industry_category, referral_code, account, password, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
                 (payload.company_name, payload.url, payload.notes or '',
-                 payload.industry_category, payload.referral_code, now, now),
+                 payload.industry_category, payload.referral_code,
+                 payload.account, payload.password, now, now),
             )
             site_id = cursor.fetchone()['id']
         connection.close()
@@ -65,6 +66,12 @@ class WebsiteRepository:
             if payload.referral_code is not None:
                 parts.append('referral_code = %s')
                 params.append(payload.referral_code)
+            if payload.account is not None:
+                parts.append('account = %s')
+                params.append(payload.account)
+            if payload.password is not None:
+                parts.append('password = %s')
+                params.append(payload.password)
             if not parts:
                 connection.close()
                 return False

@@ -5,6 +5,8 @@ export interface CareerSite {
   notes: string | null
   industry_category: string
   referral_code: string
+  account: string
+  password: string
   last_scraped_at: string | null
   scrape_status: string
   scrape_error: string | null

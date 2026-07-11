@@ -1,33 +1,29 @@
 import { useEffect, useState } from 'react'
-import { createSite, deleteSite, fetchSites, listIndustryCategories, scrapeSite, updateSite } from '../lib/websiteApi'
-import { classifyAllPositions, matchPositions } from '../lib/positionApi'
+import { createSite, deleteSite, fetchSites, listIndustryCategories, updateSite } from '../lib/websiteApi'
 import type { CareerSite, IndustryCategory } from '../types/website'
-import { fetchResumes } from '../lib/resumeApi'
-import type { ResumeListItem } from '../types/resume'
 
 type EditState = {
   company_name: string
   url: string
   industry_category: string
   referral_code: string
+  account: string
+  password: string
 }
 
-const emptyEdit: EditState = { company_name: '', url: '', industry_category: '', referral_code: '' }
+const emptyEdit: EditState = { company_name: '', url: '', industry_category: '', referral_code: '', account: '', password: '' }
 
 export function WebsiteManagementPage() {
   const [sites, setSites] = useState<CareerSite[]>([])
   const [categories, setCategories] = useState<IndustryCategory[]>([])
-  const [resumes, setResumes] = useState<ResumeListItem[]>([])
   const [editingId, setEditingId] = useState<number | null>(null)
   const [edit, setEdit] = useState<EditState>(emptyEdit)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [scrapingId, setScrapingId] = useState<number | null>(null)
 
   const loadSites = () => { fetchSites().then(setSites).catch(() => {}) }
   useEffect(() => {
     loadSites()
-    fetchResumes().then(setResumes).catch(() => {})
     listIndustryCategories().then(setCategories).catch(() => {})
   }, [])
 
@@ -44,6 +40,8 @@ export function WebsiteManagementPage() {
       url: site.url,
       industry_category: site.industry_category,
       referral_code: site.referral_code,
+      account: site.account,
+      password: site.password,
     })
     setError('')
   }
@@ -60,6 +58,8 @@ export function WebsiteManagementPage() {
       url: edit.url.trim(),
       industry_category: edit.industry_category,
       referral_code: edit.referral_code.trim(),
+      account: edit.account.trim(),
+      password: edit.password.trim(),
     }
     if (!payload.company_name || !payload.url) {
       setError('公司名称和 URL 不能为空')
@@ -88,52 +88,6 @@ export function WebsiteManagementPage() {
     void deleteSite(siteId).then(loadSites)
   }
 
-  const handleScrape = async (siteId: number) => {
-    setScrapingId(siteId)
-    setError('')
-    try {
-      await scrapeSite(siteId)
-      loadSites()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '抓取失败')
-    } finally {
-      setScrapingId(null)
-    }
-  }
-
-  const handleClassify = async () => {
-    if (!window.confirm('将调用 LLM 对所有未分类岗位进行分类，确认继续？')) return
-    setLoading(true)
-    try {
-      const result = await classifyAllPositions()
-      alert(`分类完成: ${result.classified}/${result.total}`)
-    } catch {
-      alert('分类失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleMatchBatch = async () => {
-    if (resumes.length === 0) {
-      alert('请先上传简历')
-      return
-    }
-    const resumeIdStr = window.prompt('选择简历进行匹配 (输入简历ID):')
-    if (!resumeIdStr) return
-    const resumeId = Number(resumeIdStr)
-    if (isNaN(resumeId)) return
-    setLoading(true)
-    try {
-      const result = await matchPositions(resumeId)
-      alert(`匹配完成: ${result.matched}/${result.total}`)
-    } catch {
-      alert('匹配失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); void handleSave() }
     if (e.key === 'Escape') cancelEdit()
@@ -147,11 +101,7 @@ export function WebsiteManagementPage() {
       <div className="page-header">
         <div>
           <h1>官网管理</h1>
-          <p>管理目标公司校招官网，自动抓取招聘岗位信息。</p>
-        </div>
-        <div className="button-row">
-          <button className="button" onClick={handleClassify} disabled={loading}>AI 分类岗位</button>
-          <button className="button" onClick={handleMatchBatch} disabled={loading}>AI 匹配岗位</button>
+          <p>管理目标公司校招官网链接。</p>
         </div>
       </div>
 
@@ -169,10 +119,11 @@ export function WebsiteManagementPage() {
           <thead>
             <tr>
               <th style={{ width: 110 }}>行业类别</th>
-              <th style={{ width: 160 }}>公司名称</th>
+              <th style={{ width: 140 }}>公司名称</th>
               <th>校招官网</th>
               <th style={{ width: 130 }}>内推码</th>
-              <th style={{ width: 70 }}>岗位数</th>
+              <th style={{ width: 100 }}>账号</th>
+              <th style={{ width: 100 }}>密码</th>
               <th style={{ width: 140 }}>操作</th>
             </tr>
           </thead>
@@ -219,7 +170,24 @@ export function WebsiteManagementPage() {
                     style={{ width: '100%' }}
                   />
                 </td>
-                <td>-</td>
+                <td>
+                  <input
+                    value={edit.account}
+                    onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))}
+                    onKeyDown={handleKeyDown}
+                    placeholder="账号"
+                    style={{ width: '100%' }}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={edit.password}
+                    onChange={(e) => setEdit((p) => ({ ...p, password: e.target.value }))}
+                    onKeyDown={handleKeyDown}
+                    placeholder="密码"
+                    style={{ width: '100%' }}
+                  />
+                </td>
                 <td>
                   <button type="button" className="button primary small" style={{ marginRight: 6 }} disabled={loading} onClick={() => { void handleSave() }}>
                     {loading ? '...' : '保存'}
@@ -230,7 +198,7 @@ export function WebsiteManagementPage() {
             )}
             {sites.length === 0 && !editing ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#6b7280' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#6b7280' }}>
                   暂无官网数据，请点击右上角「新增」添加。
                 </td>
               </tr>
@@ -275,9 +243,24 @@ export function WebsiteManagementPage() {
                         style={{ width: '100%' }}
                       />
                     </td>
-                    <td>{site.position_count}</td>
                     <td>
-                  <button type="button" className="button primary small" style={{ marginRight: 6 }} disabled={loading} onClick={() => { void handleSave() }}>
+                      <input
+                        value={edit.account}
+                        onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))}
+                        onKeyDown={handleKeyDown}
+                        style={{ width: '100%' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={edit.password}
+                        onChange={(e) => setEdit((p) => ({ ...p, password: e.target.value }))}
+                        onKeyDown={handleKeyDown}
+                        style={{ width: '100%' }}
+                      />
+                    </td>
+                    <td>
+                      <button type="button" className="button primary small" style={{ marginRight: 6 }} disabled={loading} onClick={() => { void handleSave() }}>
                         {loading ? '...' : '保存'}
                       </button>
                       <button type="button" className="button ghost small" onClick={cancelEdit}>取消</button>
@@ -293,13 +276,11 @@ export function WebsiteManagementPage() {
                       <a href={site.url} target="_blank" rel="noreferrer" className="link">{site.url}</a>
                     </td>
                     <td>{site.referral_code || '-'}</td>
-                    <td>{site.position_count}</td>
+                    <td>{site.account || '-'}</td>
+                    <td>{site.password || '-'}</td>
                     <td>
                       <button className="button small ghost" onClick={() => startEdit(site)}>编辑</button>
-                      <button className="button small ghost" onClick={() => handleDelete(site.id)}>删除</button>
-                      <button className="button small" disabled={scrapingId === site.id} onClick={() => { void handleScrape(site.id) }}>
-                        {scrapingId === site.id ? '抓取中...' : '抓取'}
-                      </button>
+                      <button className="button small ghost danger" onClick={() => handleDelete(site.id)}>删除</button>
                     </td>
                   </tr>
                 ),

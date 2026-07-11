@@ -121,6 +121,7 @@ async def extract_from_site(
                 pos.get('description') or '',
                 pos.get('location'),
                 pos.get('degree_requirement'),
+                resume.position_category,
             )
             score = int(result.get('score', 0))
             reason = str(result.get('reason', ''))
@@ -213,6 +214,7 @@ async def recalc_match(
         pos.description or '',
         pos.location,
         pos.degree_requirement,
+        resume.position_category,
     )
     score = int(result.get('score', 0))
     reason = str(result.get('reason', ''))

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createCandidate, extractFromSite, fetchPositionDetail } from '../lib/positionApi'
+import { requestJSON } from '../lib/http'
 import { fetchSites } from '../lib/websiteApi'
 import { fetchResume, fetchResumes } from '../lib/resumeApi'
 import type { ExtractedPosition } from '../types/position'
@@ -47,15 +48,22 @@ export function PositionExtractPage() {
 
   const handleExtract = async () => {
     if (!siteId || !resumeId) { setError('请选择官网和简历'); return }
-    const site = sites.find(s => s.id === siteId)
-    if (site && site.position_count === 0) {
-      setError('该官网暂无岗位数据，请先在「官网管理」中点击该站点的「抓取」按钮')
-      return
-    }
     setError('')
     setExtracting(true)
     setResults([])
     setSelected(new Set())
+    const site = sites.find(s => s.id === siteId)
+    if (site && site.position_count === 0) {
+      setError('正在抓取岗位数据，请稍候...')
+      try {
+        await requestJSON(`/career-sites/${siteId}/scrape`, { method: 'POST' })
+        setError('')
+      } catch {
+        setError('抓取失败，请重试')
+        setExtracting(false)
+        return
+      }
+    }
     try {
       const data = await extractFromSite(siteId, resumeId)
       setResults(data?.results || [])

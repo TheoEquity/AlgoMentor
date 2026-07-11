@@ -25,6 +25,7 @@ class ResumeRepository:
                 file_type=r['file_type'],
                 position_keywords=json.loads(r['position_keywords']),
                 position_type=r['position_type'],
+                position_category=r.get('position_category', ''),
                 extract_status=r['extract_status'],
                 created_at=r['created_at'],
             )
@@ -56,6 +57,7 @@ class ResumeRepository:
             file_type=row['file_type'],
             position_keywords=json.loads(row['position_keywords']),
             position_type=row['position_type'],
+            position_category=row.get('position_category', ''),
             extracted_info=extracted_info,
             extract_status=row['extract_status'],
             extract_error=row['extract_error'],
@@ -68,10 +70,10 @@ class ResumeRepository:
         connection = get_connection(self.database_url)
         with connection, connection.cursor() as cursor:
             cursor.execute(
-                '''INSERT INTO resumes (name, file_path, file_type, position_keywords, position_type, extract_status, created_at, updated_at)
-                   VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s) RETURNING id''',
+                '''INSERT INTO resumes (name, file_path, file_type, position_keywords, position_type, position_category, extract_status, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, 'pending', %s, %s) RETURNING id''',
                 (payload.name, file_path, payload.file_type, json.dumps(payload.position_keywords, ensure_ascii=False),
-                 payload.position_type, now, now),
+                 payload.position_type, payload.position_category, now, now),
             )
             resume_id = cursor.fetchone()['id']
         connection.close()
@@ -98,7 +100,7 @@ class ResumeRepository:
             )
         connection.close()
 
-    def update_resume(self, resume_id: int, name: str | None = None, keywords: list[str] | None = None, position_type: str | None = None) -> bool:
+    def update_resume(self, resume_id: int, name: str | None = None, keywords: list[str] | None = None, position_type: str | None = None, position_category: str | None = None) -> bool:
         now = datetime.now(UTC).isoformat()
         connection = get_connection(self.database_url)
         with connection, connection.cursor() as cursor:
@@ -113,6 +115,9 @@ class ResumeRepository:
             if position_type is not None:
                 parts.append('position_type = %s')
                 params.append(position_type)
+            if position_category is not None:
+                parts.append('position_category = %s')
+                params.append(position_category)
             if not parts:
                 connection.close()
                 return False

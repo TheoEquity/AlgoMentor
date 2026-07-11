@@ -115,6 +115,7 @@ class RecruitmentLLMService:
         position_description: str,
         position_location: str | None,
         degree_requirement: str | None,
+        position_category: str = '',
     ) -> dict:
         model = self._get_model('scraping_model')
         info = resume_info if isinstance(resume_info, dict) else resume_info.model_dump()
@@ -130,10 +131,12 @@ class RecruitmentLLMService:
 项目: {json.dumps(info.get('projects', []), ensure_ascii=False)}
 '''.strip()
 
+        category_hint = f'\n岗位类别偏好: {position_category}' if position_category else ''
+
         prompt = f'''你是一个校招岗位匹配专家。请根据以下简历信息和岗位描述，评估匹配度（0-100分），并给出简洁的匹配理由。
 
 简历信息：
-{resume_text}
+{resume_text}{category_hint}
 
 岗位信息：
 岗位名称: {position_title}
@@ -141,7 +144,7 @@ class RecruitmentLLMService:
 学历要求: {degree_requirement or '未明确'}
 岗位描述: {position_description[:1500]}
 
-评估维度：学校层次匹配、专业相关度、技能匹配度、实习/项目经验相关性、地点偏好
+评估维度：学校层次匹配、专业相关度、技能匹配度、实习/项目经验相关性、地点偏好、岗位类别匹配
 
 返回纯 JSON（不要包含 markdown 代码块标记）：
 {{

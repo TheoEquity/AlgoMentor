@@ -10,6 +10,7 @@ import type {
 } from '../types/resume'
 
 const POSITION_TYPES = ['校招', '实习']
+const POSITION_CATEGORIES = ['技术', '产品', '其他']
 
 const emptyInfo = (): ResumeExtractedInfo => ({
   name: '',
@@ -34,6 +35,7 @@ export function ResumeManagementPage() {
   const [resume, setResume] = useState<ResumeDetail | null>(null)
   const [info, setInfo] = useState<ResumeExtractedInfo>(emptyInfo())
   const [positionType, setPositionType] = useState('日常实习')
+  const [positionCategory, setPositionCategory] = useState('')
   const [keywordInput, setKeywordInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -49,11 +51,13 @@ export function ResumeManagementPage() {
           setResume(d)
           setInfo(d.extracted_info || emptyInfo())
           setPositionType(d.position_type)
+          setPositionCategory(d.position_category)
         })
       } else {
         setResume(null)
         setInfo(emptyInfo())
         setPositionType('日常实习')
+        setPositionCategory('')
       }
     }).catch(() => {})
   }, [])
@@ -84,12 +88,14 @@ export function ResumeManagementPage() {
       fd.append('name', file.name.replace(/\.[^.]+$/, ''))
       fd.append('position_keywords', JSON.stringify(resume?.position_keywords || []))
       fd.append('position_type', positionType)
+      fd.append('position_category', positionCategory)
       const created = await uploadResume(fd)
       setResume(created)
       if (created.extracted_info) {
         setInfo(created.extracted_info)
       }
       setPositionType(created.position_type)
+      setPositionCategory(created.position_category)
       setMessage(created.extracted_info ? '解析成功' : '上传成功')
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : '上传失败')
@@ -125,8 +131,10 @@ export function ResumeManagementPage() {
       fd.append('name', resume.name)
       fd.append('position_keywords', JSON.stringify(resume.position_keywords || []))
       fd.append('position_type', positionType)
+      fd.append('position_category', positionCategory)
       const updated = await updateResume(resume.id, fd)
       setResume(updated)
+      setPositionCategory(updated.position_category)
       setMessage('保存成功')
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : '保存失败')
@@ -227,6 +235,13 @@ export function ResumeManagementPage() {
               <td>
                 <select className="input" value={positionType} onChange={(e) => setPositionType(e.target.value)}>
                   {POSITION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </td>
+              <td className="resume-table-label">岗位类别</td>
+              <td>
+                <select className="input" value={positionCategory} onChange={(e) => setPositionCategory(e.target.value)}>
+                  <option value="">请选择</option>
+                  {POSITION_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </td>
             </tr>

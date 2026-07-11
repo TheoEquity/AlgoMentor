@@ -115,6 +115,7 @@ async def create_resume(
     name: str = Form(''),
     position_keywords: str = Form('[]'),
     position_type: str = Form('日常实习'),
+    position_category: str = Form(''),
     repo: ResumeRepository = Depends(_get_repo),
 ):
     if not file.filename:
@@ -152,6 +153,7 @@ async def create_resume(
         file_type=file_type,
         position_keywords=keywords,
         position_type=position_type,
+        position_category=position_category,
     )
     resume_id = repo.create_resume(payload, file_path)
 
@@ -186,6 +188,7 @@ def update_resume(
     name: str | None = Form(None),
     position_keywords: str | None = Form(None),
     position_type: str | None = Form(None),
+    position_category: str | None = Form(None),
     repo: ResumeRepository = Depends(_get_repo),
 ):
     keywords: list[str] | None = None
@@ -196,7 +199,7 @@ def update_resume(
         except (json.JSONDecodeError, TypeError):
             keywords = []
 
-    updated = repo.update_resume(resume_id, name=name, keywords=keywords, position_type=position_type)
+    updated = repo.update_resume(resume_id, name=name, keywords=keywords, position_type=position_type, position_category=position_category)
     if not updated:
         raise HTTPException(status_code=404, detail='简历不存在')
 

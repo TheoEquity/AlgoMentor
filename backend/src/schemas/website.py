@@ -10,6 +10,8 @@ class CareerSiteListItem(BaseModel):
     notes: str | None = None
     industry_category: str = ''
     referral_code: str = ''
+    account: str = ''
+    password: str = ''
     last_scraped_at: str | None = None
     scrape_status: str
     scrape_error: str | None = None
@@ -26,6 +28,8 @@ class CareerSiteCreate(BaseModel):
     notes: str = ''
     industry_category: str = ''
     referral_code: str = ''
+    account: str = ''
+    password: str = ''
 
 
 class CareerSiteUpdate(BaseModel):
@@ -36,6 +40,8 @@ class CareerSiteUpdate(BaseModel):
     notes: str | None = None
     industry_category: str | None = None
     referral_code: str | None = None
+    account: str | None = None
+    password: str | None = None
 
 
 class IndustryCategoryItem(BaseModel):

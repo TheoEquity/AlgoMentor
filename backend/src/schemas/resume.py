@@ -58,6 +58,7 @@ class ResumeListItem(BaseModel):
     file_type: str
     position_keywords: list[str] = Field(default_factory=list)
     position_type: str
+    position_category: str = ''
     extract_status: str
     created_at: str
 
@@ -69,6 +70,7 @@ class ResumeDetail(BaseModel):
     file_type: str
     position_keywords: list[str] = Field(default_factory=list)
     position_type: str
+    position_category: str = ''
     extracted_info: ResumeExtractedInfo | None = None
     extract_status: str
     extract_error: str | None = None
@@ -83,3 +85,4 @@ class ResumeCreate(BaseModel):
     file_type: str = 'txt'
     position_keywords: list[str] = Field(default_factory=list, max_length=10)
     position_type: str = '日常实习'
+    position_category: str = ''
