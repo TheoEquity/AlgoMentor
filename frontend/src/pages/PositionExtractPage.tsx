@@ -49,7 +49,7 @@ export function PositionExtractPage() {
     if (!siteId || !resumeId) { setError('请选择官网和简历'); return }
     const site = sites.find(s => s.id === siteId)
     if (site && site.position_count === 0) {
-      setError('该官网暂无岗位数据，请先在「官网管理」中抓取岗位信息')
+      setError('该官网暂无岗位数据，请先在「官网管理」中点击该站点的「抓取」按钮')
       return
     }
     setError('')

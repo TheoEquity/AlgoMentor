@@ -69,3 +69,7 @@ export function updateIndustryCategory(
 export function deleteIndustryCategory(id: number): Promise<void> {
   return requestJSON(`${INDUSTRY_BASE}/${id}`, { method: 'DELETE' })
 }
+
+export function scrapeSite(siteId: number): Promise<{ status: string }> {
+  return requestJSON(`${BASE}/${siteId}/scrape`, { method: 'POST' })
+}

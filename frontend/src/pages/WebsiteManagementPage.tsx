@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createSite, deleteSite, fetchSites, listIndustryCategories, updateSite } from '../lib/websiteApi'
+import { createSite, deleteSite, fetchSites, listIndustryCategories, scrapeSite, updateSite } from '../lib/websiteApi'
 import { classifyAllPositions, matchPositions } from '../lib/positionApi'
 import type { CareerSite, IndustryCategory } from '../types/website'
 import { fetchResumes } from '../lib/resumeApi'
@@ -22,6 +22,7 @@ export function WebsiteManagementPage() {
   const [edit, setEdit] = useState<EditState>(emptyEdit)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [scrapingId, setScrapingId] = useState<number | null>(null)
 
   const loadSites = () => { fetchSites().then(setSites).catch(() => {}) }
   useEffect(() => {
@@ -85,6 +86,19 @@ export function WebsiteManagementPage() {
   const handleDelete = (siteId: number) => {
     if (!window.confirm('确认删除该官网？关联的岗位也将被删除。')) return
     void deleteSite(siteId).then(loadSites)
+  }
+
+  const handleScrape = async (siteId: number) => {
+    setScrapingId(siteId)
+    setError('')
+    try {
+      await scrapeSite(siteId)
+      loadSites()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '抓取失败')
+    } finally {
+      setScrapingId(null)
+    }
   }
 
   const handleClassify = async () => {
@@ -282,7 +296,10 @@ export function WebsiteManagementPage() {
                     <td>{site.position_count}</td>
                     <td>
                       <button className="button small ghost" onClick={() => startEdit(site)}>编辑</button>
-                      <button className="button small ghost danger" onClick={() => handleDelete(site.id)}>删除</button>
+                      <button className="button small ghost" onClick={() => handleDelete(site.id)}>删除</button>
+                      <button className="button small" disabled={scrapingId === site.id} onClick={() => { void handleScrape(site.id) }}>
+                        {scrapingId === site.id ? '抓取中...' : '抓取'}
+                      </button>
                     </td>
                   </tr>
                 ),
