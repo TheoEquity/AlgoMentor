@@ -142,10 +142,12 @@ async def extract_from_site(
             source_position_id=r['position']['id'],
             company_name=r['position'].get('company_name', ''),
             title=r['position']['title'],
+            department=r['position'].get('department', ''),
             location=r['position'].get('location') or '',
             description=r['position'].get('description') or '',
             apply_url=r['position'].get('apply_url') or '',
             degree_requirement=r['position'].get('degree_requirement') or '',
+            deadline=r['position'].get('deadline') or '',
             score=r['score'],
             reason=r['reason'],
         )

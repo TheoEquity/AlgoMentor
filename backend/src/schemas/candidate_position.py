@@ -61,10 +61,12 @@ class ExtractedPositionResult(BaseModel):
     source_position_id: int
     company_name: str
     title: str
+    department: str = ''
     location: str
     description: str
     apply_url: str
     degree_requirement: str
+    deadline: str = ''
     score: int
     reason: str
 

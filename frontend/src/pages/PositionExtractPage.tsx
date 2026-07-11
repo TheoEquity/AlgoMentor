@@ -11,9 +11,11 @@ const PLACEHOLDER: ExtractedPosition = {
   source_position_id: 0,
   company_name: '-',
   title: '-',
+  department: '',
   location: '-',
   apply_url: '',
   degree_requirement: '-',
+  deadline: '',
   description: '',
   score: 0,
   reason: '',
@@ -144,6 +146,12 @@ export function PositionExtractPage() {
   const positionCategory = resumeDetail?.position_category || ''
   const positionKeywords = resumeDetail?.position_keywords || []
 
+  const cityName = (loc: string) => {
+    if (!loc) return ''
+    const m = loc.match(/([\u4e00-\u9fff]+?)(市|省|区|县|州)/)
+    return m ? m[1] + m[2] : loc.slice(0, 4)
+  }
+
   const hasResults = results.length > 0
 
   const rows: (ExtractedPosition | null)[] = []
@@ -226,49 +234,53 @@ export function PositionExtractPage() {
           <table className="data-table" style={{ tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ width: 50 }} />
+                <th style={{ width: 42 }} />
                 <th style={{ width: 100 }}>公司</th>
-                <th style={{ width: 140 }}>地点</th>
-                <th style={{ width: 220 }}>岗位名称</th>
-                <th style={{ width: 80 }}>学历</th>
-                <th style={{ width: 90 }}>匹配度</th>
-                <th style={{ width: 70 }}>详情</th>
+                <th style={{ width: 90 }}>部门</th>
+                <th style={{ width: 80 }}>地点</th>
+                <th style={{ width: 200 }}>岗位名称</th>
+                <th style={{ width: 75 }}>学历要求</th>
+                <th style={{ width: 80 }}>截止时间</th>
+                <th style={{ width: 85 }}>匹配度</th>
+                <th style={{ width: 55 }}>详情</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, idx) => {
-                if (!r) return <tr key={idx}><td colSpan={7} style={{ color: '#9ca3af', textAlign: 'center' }}>-</td></tr>
+                if (!r) return <tr key={idx}><td colSpan={9} style={{ color: '#9ca3af', textAlign: 'center' }}>-</td></tr>
                 return (
                   <tr key={idx} style={{ background: selected.has(idx) ? '#eff6ff' : undefined }}>
                     <td>
                       <input type="checkbox" checked={selected.has(idx)} onChange={() => handleSelect(idx)} />
-                      </td>
-                      <td>{r.company_name}</td>
-                      <td>{r.location}</td>
-                      <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.apply_url ? (
-                          <a href={r.apply_url} target="_blank" rel="noreferrer" className="link">{r.title}</a>
-                        ) : r.title}
-                      </td>
-                      <td>{r.degree_requirement}</td>
+                    </td>
+                    <td>{r.company_name}</td>
+                    <td>{r.department}</td>
+                    <td>{cityName(r.location)}</td>
+                    <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.apply_url ? (
+                        <a href={r.apply_url} target="_blank" rel="noreferrer" className="link">{r.title}</a>
+                      ) : r.title}
+                    </td>
+                    <td>{r.degree_requirement}</td>
+                    <td>{r.deadline}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ flex: 1, height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${r.score}%`, background: r.score >= 70 ? '#22c55e' : r.score >= 40 ? '#f59e0b' : '#ef4444', borderRadius: 3 }} />
                         </div>
                         <span style={{ fontSize: 12, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{r.score}%</span>
-                        </div>
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <button
-                          type="button"
-                          className="link"
-                          style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
-                          onClick={() => { void handleShowDetail(r) }}
-                        >
-                          详情
-                        </button>
-                      </td>
+                      </div>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        className="link"
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+                        onClick={() => { void handleShowDetail(r) }}
+                      >
+                        详情
+                      </button>
+                    </td>
                   </tr>
                 )
               })}

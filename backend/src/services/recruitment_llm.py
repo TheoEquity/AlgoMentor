@@ -162,3 +162,37 @@ class RecruitmentLLMService:
             settings = self._load_settings()
             self._model_cache = settings
         return self._model_cache.get(key) or 'gpt-4.1-mini'
+
+    async def extract_positions_from_page(self, page_text: str, links_text: str) -> list[dict]:
+        model = self._get_model('scraping_model')
+        prompt = f'''你是一个招聘网站数据提取引擎。从下方网页文本中识别所有校招/实习岗位并提取结构化信息。只返回纯 JSON 数组，不要 markdown 标记。
+
+规则：
+1. 识别所有岗位条目，每个岗位返回一个对象
+2. 字段如果原文没有提及，用空字符串""
+3. title: 岗位名称（去除公司名、部门名等前缀后缀）
+4. location: 工作地点，只提取城市名（如"北京"、"上海"）
+5. department: 所属部门（如"技术部"、"产品部"）
+6. degree_requirement: 学历要求（如"本科"、"硕士"）
+7. deadline: 截止时间（如有）
+8. 不要编造任何信息
+
+页面上可点击的链接（供参考，帮助判断岗位详情链接）：
+{links_text[:3000]}
+
+页面文本内容：
+{page_text[:8000]}
+
+返回格式（纯 JSON 数组）：
+[{{"title":"","location":"","department":"","degree_requirement":"","deadline":""}}]'''
+
+        result = await self._chat(prompt, 8192, model)
+        cleaned = re.sub(r'```json\s*', '', result)
+        cleaned = re.sub(r'```\s*', '', cleaned)
+        try:
+            data = json.loads(cleaned.strip())
+            if not isinstance(data, list):
+                return [data] if isinstance(data, dict) else []
+        except json.JSONDecodeError:
+            return []
+        return data

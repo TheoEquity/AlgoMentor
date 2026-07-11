@@ -9,6 +9,8 @@ class RecruitmentPositionListItem(BaseModel):
     company_name: str = ''
     title: str
     location: str | None = None
+    department: str = ''
+    deadline: str = ''
     degree_requirement: str | None = None
     position_type: str
     status: str
@@ -24,6 +26,8 @@ class RecruitmentPositionDetail(BaseModel):
     company_name: str = ''
     title: str
     location: str | None = None
+    department: str = ''
+    deadline: str = ''
     degree_requirement: str | None = None
     description: str | None = None
     apply_url: str | None = None
@@ -42,6 +46,8 @@ class RecruitmentPositionCreate(BaseModel):
     site_id: int
     title: str
     location: str = ''
+    department: str = ''
+    deadline: str = ''
     degree_requirement: str = ''
     description: str = ''
     apply_url: str = ''

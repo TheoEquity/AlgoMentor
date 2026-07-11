@@ -52,6 +52,8 @@ class PositionRepository:
                 company_name=r.get('company_name', ''),
                 title=r['title'],
                 location=r.get('location'),
+                department=r.get('department', ''),
+                deadline=r.get('deadline', ''),
                 degree_requirement=r.get('degree_requirement'),
                 position_type=r['position_type'],
                 status=r['status'],
@@ -96,6 +98,8 @@ class PositionRepository:
             company_name=row.get('company_name', ''),
             title=row['title'],
             location=row.get('location'),
+            department=row.get('department', ''),
+            deadline=row.get('deadline', ''),
             degree_requirement=row.get('degree_requirement'),
             description=row.get('description'),
             apply_url=row.get('apply_url'),
@@ -118,18 +122,20 @@ class PositionRepository:
                     title = pos.get('title', '')
                     company = pos.get('company', '')
                     location = pos.get('location', '')
+                    department = pos.get('department', '')
+                    deadline = pos.get('deadline', '')
                     source_hash = hashlib.md5(
                         (title + company + location).encode('utf-8')
                     ).hexdigest()
 
                     cursor.execute(
                         '''INSERT INTO recruitment_positions
-                           (site_id, title, location, degree_requirement, description, apply_url,
+                           (site_id, title, location, department, deadline, degree_requirement, description, apply_url,
                             position_type, status, source_hash, extracted_at, created_at)
-                           VALUES (%s, %s, %s, %s, %s, %s, '未分类', 'pending', %s, %s, %s)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, '未分类', 'pending', %s, %s, %s)
                            ON CONFLICT (source_hash) DO NOTHING''',
                         (
-                            site_id, title, location,
+                            site_id, title, location, department, deadline,
                             pos.get('degree_requirement', ''),
                             pos.get('description', ''),
                             pos.get('apply_url', ''),
@@ -152,13 +158,14 @@ class PositionRepository:
         with connection, connection.cursor() as cursor:
             cursor.execute(
                 '''INSERT INTO recruitment_positions
-                   (site_id, title, location, degree_requirement, description, apply_url,
+                   (site_id, title, location, department, deadline, degree_requirement, description, apply_url,
                     position_type, status, source_hash, extracted_at, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s)
                    ON CONFLICT (source_hash) DO NOTHING
                    RETURNING id''',
                 (
                     payload.site_id, payload.title, payload.location,
+                    payload.department, payload.deadline,
                     payload.degree_requirement, payload.description, payload.apply_url,
                     payload.position_type, source_hash, now, now,
                 ),
@@ -268,10 +275,17 @@ class PositionRepository:
     def update_detail(self, position_id: int, detail: dict) -> None:
         connection = get_connection(self.database_url)
         with connection, connection.cursor() as cursor:
-            cursor.execute(
-                'UPDATE recruitment_positions SET detail = %s WHERE id = %s',
-                (json.dumps(detail, ensure_ascii=False), position_id),
-            )
+            parts = ['detail = %s']
+            params: list = [json.dumps(detail, ensure_ascii=False)]
+            if detail.get('deadline'):
+                parts.append('deadline = %s')
+                params.append(detail['deadline'])
+            if detail.get('location'):
+                parts.append('location = %s')
+                params.append(detail['location'])
+            parts.append('id = %s')
+            params.append(position_id)
+            cursor.execute(f'UPDATE recruitment_positions SET {", ".join(parts[:-1])} WHERE {parts[-1]}', params)
         connection.close()
 
     def get_detail(self, position_id: int) -> dict | None:

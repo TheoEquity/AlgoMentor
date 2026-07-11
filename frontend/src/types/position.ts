@@ -42,10 +42,12 @@ export interface ExtractedPosition {
   source_position_id: number
   company_name: string
   title: string
+  department: string
   location: string
   description: string
   apply_url: string
   degree_requirement: string
+  deadline: string
   score: number
   reason: string
 }

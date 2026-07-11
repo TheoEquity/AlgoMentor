@@ -14,8 +14,28 @@ SITE_SCRAPERS: dict[str, str] = {
 }
 
 
+def _extract_department(title: str) -> str:
+    """Try to extract department from title like '职位-部门' or '职位（地点）部门'."""
+    import re
+    # Pattern: "职位（地点）部门名" or "职位-部门名"
+    # First try: after location in parentheses
+    m = re.search(r'）\s*(\S+)', title)
+    if m and len(m.group(1)) < 30:
+        dept = m.group(1)
+        if dept and '工程师' not in dept and '经理' not in dept and '专家' not in dept and '实习' not in dept:
+            return dept
+    # Second try: after last dash
+    if '-' in title:
+        parts = title.rsplit('-', 1)
+        if len(parts) > 1 and len(parts[1].strip()) < 30:
+            dept = parts[1].strip()
+            if dept and not any(kw in dept for kw in ['工程师', '经理', '专家', '实习', '校招', '秋招']):
+                return dept
+    return ''
+
+
 async def _scrape_chinatelecom(url: str, browser_settings: dict) -> list[dict]:
-    """Scan all units and pages, collecting only title + location from list view (no click-into-detail)."""
+    """Use API endpoints directly: getShowRecruitOrg + position/list for each unit."""
     positions: list[dict] = []
     headless = browser_settings.get('headless', True)
     timeout = browser_settings.get('timeout_seconds', 30) * 1000
@@ -29,70 +49,77 @@ async def _scrape_chinatelecom(url: str, browser_settings: dict) -> list[dict]:
         await page.goto(url, wait_until='networkidle', timeout=timeout)
         await asyncio.sleep(5)
 
-        unit_items = await page.query_selector_all('div.list li')
-        total_units = len(unit_items)
-        print(f'[ChinaTelecom] Found {total_units} recruiting units')
+        # Step 1: Get all recruiting units via API
+        units_raw = await page.evaluate('''async () => {
+            const resp = await fetch('/wt/web/platform/mvc/officialWeb/getShowRecruitOrg?corpCode=TELE&recruitType=12');
+            if (!resp.ok) return {data: []};
+            return await resp.json();
+        }''')
+        units = (units_raw.get('data') or []) if isinstance(units_raw, dict) else []
+        print(f'[ChinaTelecom] API found {len(units)} recruiting units')
 
-        for unit_idx in range(total_units):
-            lis = await page.query_selector_all('div.list li')
-            if unit_idx >= len(lis):
-                break
-            unit_name = (await lis[unit_idx].inner_text()).strip()
-            print(f'[ChinaTelecom] Unit {unit_idx+1}/{total_units}: {unit_name}')
-            await lis[unit_idx].click()
-            await asyncio.sleep(3)
+        seen = set()
+        for unit in units:
+            unit_id = unit.get('uniqueKey')
+            unit_name = unit.get('cnExternalName') or unit.get('cnName', '')
+            if not unit_id:
+                continue
+            print(f'[ChinaTelecom] Fetching unit: {unit_name}')
 
             page_num = 1
             while True:
-                job_items = await page.query_selector_all('div.post ul li')
-                if len(job_items) == 0:
+                result = await page.evaluate(f'''async () => {{
+                    const form = new URLSearchParams();
+                    form.append('rowSize', '100');
+                    form.append('rowIndex', '{page_num}');
+                    form.append('recruitType', '12');
+                    form.append('org', '{unit_id}');
+                    form.append('postName', '');
+                    form.append('workCity', '');
+                    form.append('keyWord', '');
+                    const resp = await fetch('/wt/TELE/web/mode400/position/list', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
+                        body: form.toString()
+                    }});
+                    if (!resp.ok) return {{data: {{details: [], rowCount: 0}}}};
+                    return await resp.json();
+                }}''')
+
+                data = result.get('data', {}) if isinstance(result, dict) else {}
+                details = data.get('details', [])
+                if not details:
                     break
 
-                for item in job_items:
-                    try:
-                        title_el = await item.query_selector('div.title')
-                        labels = await item.query_selector_all('label')
-                        title = (await title_el.inner_text()).strip() if title_el else ''
-                        location = (await labels[1].inner_text()).strip() if len(labels) > 1 else ''
-                        if title:
-                            positions.append({
-                                'title': title,
-                                'company': unit_name,
-                                'location': location,
-                                'degree_requirement': '',
-                                'description': '',
-                                'apply_url': url,
-                            })
-                    except Exception:
+                for job in details:
+                    title = (job.get('PostName') or '').strip()
+                    if not title or len(title) < 2:
                         continue
+                    key = f"{unit_id}:{job.get('PostId')}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    positions.append({
+                        'title': title,
+                        'company': unit_name,
+                        'location': job.get('WorkPlace', ''),
+                        'department': job.get('OrgName', ''),
+                        'deadline': '',
+                        'degree_requirement': '',
+                        'description': '',
+                        'apply_url': url,
+                    })
 
-                next_btn = await page.query_selector('button:has-text(">"), li.next:not(.disabled) button, .paging-main-bo button:last-child')
-                if next_btn and page_num <= 10:
-                    try:
-                        await next_btn.click()
-                        await asyncio.sleep(2)
-                        page_num += 1
-                    except Exception:
-                        break
-                else:
+                row_count = data.get('rowCount', 0)
+                if row_count <= page_num * 100:
                     break
-
-            back_btn = await page.query_selector('span.btn:has-text("返回")')
-            if back_btn:
-                await back_btn.click()
-                await asyncio.sleep(3)
+                page_num += 1
+                await asyncio.sleep(0.5)
 
         await browser.close()
 
-    seen = set()
-    unique = []
-    for p in positions:
-        key = p['title'] + (p.get('company') or '')
-        if key not in seen:
-            seen.add(key)
-            unique.append(p)
-    print(f'[ChinaTelecom] Total unique positions: {len(unique)}')
-    return unique
+    print(f'[ChinaTelecom] Total unique positions: {len(positions)}')
+    return positions
 
 
 async def _scrape_alibaba(url: str, browser_settings: dict) -> list[dict]:
@@ -124,6 +151,8 @@ async def _scrape_alibaba(url: str, browser_settings: dict) -> list[dict]:
                     'title': title,
                     'company': '',
                     'location': '',
+                    'department': '',
+                    'deadline': '',
                     'degree_requirement': '',
                     'description': '',
                     'apply_url': href or '',
@@ -172,6 +201,8 @@ async def _scrape_bytedance(url: str, browser_settings: dict) -> list[dict]:
                     'title': title,
                     'company': '',
                     'location': '',
+                    'department': '',
+                    'deadline': '',
                     'degree_requirement': '',
                     'description': '',
                     'apply_url': href or '',
@@ -196,11 +227,13 @@ SCRAPERS = {
 }
 
 
-async def scrape_site(company_name: str, url: str, browser_settings: dict | None = None) -> list[dict]:
+async def scrape_site(company_name: str, url: str, browser_settings: dict | None = None, llm=None) -> list[dict]:
     if browser_settings is None:
         browser_settings = {'headless': True, 'timeout_seconds': 30, 'viewport_width': 1280, 'viewport_height': 720}
 
     scraper_key = SITE_SCRAPERS.get(company_name, 'generic')
+    if scraper_key == 'generic' and llm is not None:
+        return await _scrape_generic_llm(url, browser_settings, llm)
     scraper = SCRAPERS.get(scraper_key, _scrape_generic)
     return await scraper(url, browser_settings)
 
@@ -250,6 +283,8 @@ async def _scrape_generic(url: str, browser_settings: dict) -> list[dict]:
                     'title': title,
                     'company': '',
                     'location': '',
+                    'department': '',
+                    'deadline': '',
                     'degree_requirement': '',
                     'description': '',
                     'apply_url': href or '',
@@ -266,6 +301,74 @@ async def _scrape_generic(url: str, browser_settings: dict) -> list[dict]:
             seen.add(key)
             unique.append(p)
     return unique
+
+
+async def _scrape_generic_llm(url: str, browser_settings: dict, llm) -> list[dict]:
+    """Use LLM to identify and extract positions from page text."""
+    positions: list[dict] = []
+    headless = browser_settings.get('headless', True)
+    timeout = browser_settings.get('timeout_seconds', 30) * 1000
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context(
+            viewport={'width': browser_settings.get('viewport_width', 1280), 'height': browser_settings.get('viewport_height', 720)},
+        )
+        page = await context.new_page()
+        await page.goto(url, wait_until='networkidle', timeout=timeout)
+        await asyncio.sleep(5)
+
+        # Extract page text and links
+        page_text = await page.evaluate('''() => {
+            const main = document.querySelector('main, [role="main"], .content, .main-content, #content') || document.body;
+            return main.innerText.replace(/\\n{3,}/g, '\\n\\n').substring(0, 12000);
+        }''')
+
+        links = await page.evaluate('''() => {
+            const anchors = document.querySelectorAll('a[href]');
+            return Array.from(anchors).slice(0, 200).map(a => ({
+                text: (a.innerText || '').trim().substring(0, 80),
+                href: a.href
+            })).filter(l => l.text && l.href);
+        }''')
+        links_text = '\n'.join(f'{l["text"]}  ->  {l["href"]}' for l in (links or []))
+
+        await browser.close()
+
+    if not page_text or len(page_text.strip()) < 50:
+        print('[LLM Scrape] Page text too short, falling back to generic')
+        return []
+
+    print(f'[LLM Scrape] Page text: {len(page_text)} chars, links: {len(links or [])}')
+    try:
+        extracted = await llm.extract_positions_from_page(page_text, links_text)
+        print(f'[LLM Scrape] LLM extracted {len(extracted)} positions')
+    except Exception as e:
+        print(f'[LLM Scrape] LLM extraction failed: {e}')
+        return []
+
+    seen = set()
+    for item in extracted:
+        title = str(item.get('title', '')).strip()
+        if not title or len(title) < 2:
+            continue
+        key = title[:50]
+        if key in seen:
+            continue
+        seen.add(key)
+        positions.append({
+            'title': title,
+            'company': '',
+            'location': str(item.get('location', '')).strip(),
+            'department': str(item.get('department', '')).strip(),
+            'deadline': str(item.get('deadline', '')).strip(),
+            'degree_requirement': str(item.get('degree_requirement', '')).strip(),
+            'description': '',
+            'apply_url': url,
+        })
+
+    print(f'[LLM Scrape] Total unique positions: {len(positions)}')
+    return positions
 
 
 async def fetch_position_detail(

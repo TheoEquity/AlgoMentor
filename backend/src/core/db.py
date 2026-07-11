@@ -139,6 +139,8 @@ def initialize_database(database_url: str) -> None:
                 degree_requirement TEXT,
                 description TEXT,
                 apply_url TEXT,
+                department TEXT NOT NULL DEFAULT '',
+                deadline TEXT NOT NULL DEFAULT '',
                 position_type TEXT NOT NULL DEFAULT '未分类',
                 status TEXT NOT NULL DEFAULT 'pending',
                 source_hash TEXT NOT NULL UNIQUE,

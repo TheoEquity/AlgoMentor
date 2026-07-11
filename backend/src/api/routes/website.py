@@ -12,6 +12,7 @@ from repositories.website_repository import WebsiteRepository
 from schemas.website import CareerSiteCreate, CareerSiteListItem, CareerSiteUpdate
 from schemas.position import PositionDetailRequest, PositionDetailResponse
 from services.scraping_service import scrape_site, fetch_position_detail
+from services.recruitment_llm import RecruitmentLLMService
 
 router = APIRouter(prefix='/career-sites', tags=['Career Sites'])
 
@@ -85,7 +86,8 @@ async def scrape_career_site(
     repo.update_scrape_status(site_id, 'running')
     try:
         browser_settings = _get_browser_settings()
-        positions = await scrape_site(site.company_name, site.url, browser_settings)
+        llm = RecruitmentLLMService(Settings().database_url)
+        positions = await scrape_site(site.company_name, site.url, browser_settings, llm)
         pos_repo = PositionRepository(Settings().database_url)
         count = pos_repo.create_from_scraped(site_id, positions)
         repo.update_scrape_status(site_id, 'success', position_count=count)
