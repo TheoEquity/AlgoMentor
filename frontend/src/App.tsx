@@ -19,14 +19,14 @@ import { TrainingPlanDetailPage } from './pages/TrainingPlanDetailPage'
 import { ChatPage } from './pages/ChatPage'
 import { ResumeManagementPage } from './pages/ResumeManagementPage'
 import { WebsiteManagementPage } from './pages/WebsiteManagementPage'
-import { PositionManagementPage } from './pages/PositionManagementPage'
-import { PositionExtractPage } from './pages/PositionExtractPage'
-import { ApplicationTrackingPage } from './pages/ApplicationTrackingPage'
+import { ApplicationManagementPage } from './pages/ApplicationManagementPage'
+import { JobPositionDetailPage } from './pages/JobPositionDetailPage'
 import type { ProblemDetail } from './types/problem'
 import type { ProblemCategory } from './types/problemCategory'
 
 type ProblemMode = 'overview' | 'training'
 type TrainingView = 'list' | 'create' | 'plan-detail'
+type ApplicationView = 'list' | 'create' | 'edit'
 
 type AppRouteState = {
   activeNav: NavigationKey
@@ -35,6 +35,8 @@ type AppRouteState = {
   chatProblemId: number | null
   trainingView: TrainingView
   selectedPlanId: number | null
+  applicationView: ApplicationView
+  selectedJobPositionId: number | null
 }
 
 function readRouteFromLocation(): AppRouteState {
@@ -50,11 +52,13 @@ function readRouteFromLocation(): AppRouteState {
       chatProblemId: null,
       trainingView: 'list',
       selectedPlanId: null,
+      applicationView: 'list',
+      selectedJobPositionId: null,
     }
   }
 
   if (pathname === '/' || pathname === '/dashboard') {
-    return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   const chatProblemId = searchParams.get('problem_id')
@@ -66,51 +70,54 @@ function readRouteFromLocation(): AppRouteState {
       chatProblemId: chatProblemId ? Number(chatProblemId) : null,
       trainingView: 'list',
       selectedPlanId: null,
+      applicationView: 'list',
+      selectedJobPositionId: null,
     }
   }
 
   if (pathname === '/training') {
-    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/training/create') {
-    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null }
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   const planMatch = pathname.match(/^\/training\/plans\/(\d+)$/)
   if (planMatch) {
-    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: Number(planMatch[1]) }
+    return { activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: Number(planMatch[1]), applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/review') {
-    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'review', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/system') {
-    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'system', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/resume') {
-    return { activeNav: 'resume', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'resume', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/website') {
-    return { activeNav: 'website', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
-  }
-
-  if (pathname === '/extract') {
-    return { activeNav: 'extract', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
-  }
-
-  if (pathname === '/position') {
-    return { activeNav: 'position', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'website', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
   if (pathname === '/application') {
-    return { activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+    return { activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
   }
 
-  return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null }
+  const jobPositionMatch = pathname.match(/^\/job-position\/(\d+)$/)
+  if (jobPositionMatch) {
+    return { activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'edit', selectedJobPositionId: Number(jobPositionMatch[1]) }
+  }
+
+  if (pathname === '/job-position') {
+    return { activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'create', selectedJobPositionId: null }
+  }
+
+  return { activeNav: 'dashboard', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null }
 }
 
 function buildRoutePath(route: AppRouteState): string {
@@ -128,6 +135,12 @@ function buildRoutePath(route: AppRouteState): string {
     if (route.trainingView === 'create') return '/training/create'
     if (route.trainingView === 'plan-detail' && route.selectedPlanId !== null) return `/training/plans/${route.selectedPlanId}`
     return '/training'
+  }
+
+  if (route.activeNav === 'application') {
+    if (route.applicationView === 'create') return '/job-position'
+    if (route.applicationView === 'edit' && route.selectedJobPositionId !== null) return `/job-position/${route.selectedJobPositionId}`
+    return '/application'
   }
 
   return route.activeNav === 'dashboard' ? '/dashboard' : route.activeNav === 'library' ? '/library' : `/${route.activeNav}`
@@ -148,6 +161,8 @@ function App() {
   const [chatProblemId, setChatProblemId] = useState<number | null>(initialRoute.chatProblemId)
   const [trainingView, setTrainingView] = useState<TrainingView>(initialRoute.trainingView)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(initialRoute.selectedPlanId)
+  const [applicationView, setApplicationView] = useState<ApplicationView>(initialRoute.applicationView)
+  const [selectedJobPositionId, setSelectedJobPositionId] = useState<number | null>(initialRoute.selectedJobPositionId)
 
   useEffect(() => {
     if (createPageOpen) {
@@ -163,8 +178,6 @@ function App() {
       chat: 'AI 对话 - AlgoMentor',
       resume: '简历管理 - AlgoMentor',
       website: '官网管理 - AlgoMentor',
-      extract: '岗位提取 - AlgoMentor',
-      position: '候选岗位 - AlgoMentor',
       application: '投递管理 - AlgoMentor',
     }
     document.title = titles[activeNav]
@@ -225,6 +238,8 @@ function App() {
       setProblemMode(route.problemMode)
       setTrainingView(route.trainingView)
       setSelectedPlanId(route.selectedPlanId)
+      setApplicationView(route.applicationView)
+      setSelectedJobPositionId(route.selectedJobPositionId)
       setProblemReloadSeed(0)
     }
 
@@ -243,6 +258,8 @@ function App() {
     setChatProblemId(route.chatProblemId)
     setTrainingView(route.trainingView)
     setSelectedPlanId(route.selectedPlanId)
+    setApplicationView(route.applicationView)
+    setSelectedJobPositionId(route.selectedJobPositionId)
     setProblemReloadSeed(0)
   }
 
@@ -252,7 +269,7 @@ function App() {
   }
 
   const handleNavigate = (next: NavigationKey) => {
-    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })
+    navigateTo({ activeNav: next, selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })
   }
 
   return (
@@ -270,13 +287,13 @@ function App() {
           onProblemCreated={(problemId) => {
             setCreatePageOpen(false)
             setHintsRefreshSeed((s) => s + 1)
-            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview', applicationView: 'list', selectedJobPositionId: null })
           }}
         />
       ) : isLibrary ? (
         <ProblemLibraryPage
           onOpenProblem={(problemId) => {
-            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview', applicationView: 'list', selectedJobPositionId: null })
           }}
           onCreateProblem={() => setCreatePageOpen(true)}
         />
@@ -284,18 +301,20 @@ function App() {
         <ProblemOverviewPage
           problem={selectedProblem}
           categoryName={categoryNameBySlug.get(selectedProblem.category_slug) || ''}
-          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null })}
-          onStartTraining={() => navigateTo({ activeNav: 'library', selectedProblemId: selectedProblem.id, problemMode: 'training', chatProblemId: null })}
+          onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
+
+          onStartTraining={() => navigateTo({ activeNav: 'library', selectedProblemId: selectedProblem.id, problemMode: 'training', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
+
           onProblemSaved={setSelectedProblem}
           onGoToChat={(problemId) => {
-            navigateTo({ activeNav: 'chat', selectedProblemId: null, problemMode: 'overview', chatProblemId: problemId })
+            navigateTo({ activeNav: 'chat', selectedProblemId: null, problemMode: 'overview', chatProblemId: problemId, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })
           }}
           onProblemGenerated={(problemId) => {
-            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview' })
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'overview', applicationView: 'list', selectedJobPositionId: null })
           }}
         />
       ) : isWorkspace && selectedProblem ? (
-        <ProblemDetailPage problem={selectedProblem} onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview' })} />
+        <ProblemDetailPage problem={selectedProblem} onBack={() => navigateTo({ activeNav: 'library', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })} />
       ) : isWorkspace && problemError ? (
         <div className="backend-note action-note">
           <span>题目详情加载失败：{problemError}</span>
@@ -311,36 +330,46 @@ function App() {
         <ChatPage problemId={chatProblemId} />
       ) : activeNav === 'training' && trainingView === 'create' ? (
         <TrainingPlanCreatePage
-          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
-          onPlanCreated={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
+          onPlanCreated={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
         />
       ) : activeNav === 'training' && trainingView === 'plan-detail' && selectedPlanId !== null ? (
         <TrainingPlanDetailPage
           planId={selectedPlanId}
-          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
-          onStartTraining={(problemId) => navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training', chatProblemId: null, trainingView: 'list', selectedPlanId: null })}
+          onBack={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
+          onStartTraining={(problemId) => navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
         />
       ) : activeNav === 'training' ? (
         <TrainingPlanListPage
-          onCreatePlan={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null })}
-          onOpenPlan={(planId) => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: planId })}
+          onCreatePlan={() => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'create', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })}
+          onOpenPlan={(planId) => navigateTo({ activeNav: 'training', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'plan-detail', selectedPlanId: planId, applicationView: 'list', selectedJobPositionId: null })}
         />
       ) : activeNav === 'review' ? (
         <ReviewCenterPage
           onOpenProblem={(problemId) => {
-            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training' })
+            navigateTo({ activeNav: 'library', selectedProblemId: problemId, problemMode: 'training', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'list', selectedJobPositionId: null })
           }}
         />
       ) : activeNav === 'resume' ? (
         <ResumeManagementPage />
       ) : activeNav === 'website' ? (
         <WebsiteManagementPage />
-      ) : activeNav === 'extract' ? (
-        <PositionExtractPage />
-      ) : activeNav === 'position' ? (
-        <PositionManagementPage />
+      ) : activeNav === 'application' && applicationView === 'create' ? (
+        <JobPositionDetailPage mode="create" onBack={() => navigateTo({ ...readRouteFromLocation(), activeNav: 'application', applicationView: 'list', selectedJobPositionId: null })} />
+      ) : activeNav === 'application' && applicationView === 'edit' && selectedJobPositionId !== null ? (
+        <JobPositionDetailPage mode="edit" positionId={selectedJobPositionId} onBack={() => navigateTo({ ...readRouteFromLocation(), activeNav: 'application', applicationView: 'list', selectedJobPositionId: null })} />
       ) : activeNav === 'application' ? (
-        <ApplicationTrackingPage />
+        <ApplicationManagementPage
+          onNavigate={(key, params) => {
+            if (key === 'jobPositionDetail') {
+              if (params?.mode === 'create') {
+                navigateTo({ activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'create', selectedJobPositionId: null })
+              } else if (params?.mode === 'edit' && params?.id) {
+                navigateTo({ activeNav: 'application', selectedProblemId: null, problemMode: 'overview', chatProblemId: null, trainingView: 'list', selectedPlanId: null, applicationView: 'edit', selectedJobPositionId: Number(params.id) })
+              }
+            }
+          }}
+        />
       ) : (
         <div className="backend-note">正在加载题目详情...</div>
       )}

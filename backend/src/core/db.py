@@ -103,6 +103,7 @@ def initialize_database(database_url: str) -> None:
                 file_type TEXT NOT NULL,
                 position_keywords TEXT NOT NULL DEFAULT '[]',
                 position_type TEXT NOT NULL DEFAULT '日常实习',
+                position_category TEXT NOT NULL DEFAULT '',
                 extracted_info TEXT,
                 extract_status TEXT NOT NULL DEFAULT 'pending',
                 extract_error TEXT,
@@ -162,14 +163,29 @@ def initialize_database(database_url: str) -> None:
         ''')
 
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS job_applications (
+            CREATE TABLE IF NOT EXISTS job_positions (
                 id SERIAL PRIMARY KEY,
-                position_id INTEGER NOT NULL REFERENCES recruitment_positions(id) ON DELETE CASCADE,
-                resume_id INTEGER NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
-                status TEXT NOT NULL DEFAULT 'pending_apply',
-                applied_at TEXT,
-                feedback_at TEXT,
-                notes TEXT,
+                resume_id INTEGER REFERENCES resumes(id) ON DELETE SET NULL,
+                company_name TEXT NOT NULL,
+                department TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL,
+                location TEXT DEFAULT '',
+                position_type TEXT DEFAULT '',
+                position_category TEXT DEFAULT '',
+                industry_category TEXT DEFAULT '',
+                job_url TEXT DEFAULT '',
+                publish_date TEXT DEFAULT '',
+                deadline TEXT DEFAULT '',
+                job_description TEXT DEFAULT '',
+                job_requirements TEXT DEFAULT '',
+                job_preferences TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT '待投递',
+                status_date TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                apply_channel TEXT DEFAULT '',
+                match_score INTEGER DEFAULT 0,
+                match_detail TEXT DEFAULT '',
+                match_advice TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -193,6 +209,21 @@ def initialize_database(database_url: str) -> None:
         )
         cursor.execute(
             "ALTER TABLE career_sites ADD COLUMN IF NOT EXISTS referral_code TEXT DEFAULT ''"
+        )
+
+        cursor.execute(
+            "ALTER TABLE resumes ADD COLUMN IF NOT EXISTS position_category TEXT NOT NULL DEFAULT ''"
+        )
+
+        cursor.execute(
+            "ALTER TABLE job_positions ALTER COLUMN resume_id DROP NOT NULL"
+        )
+
+        cursor.execute(
+            "ALTER TABLE job_positions ADD COLUMN IF NOT EXISTS industry_category TEXT DEFAULT ''"
+        )
+        cursor.execute(
+            "ALTER TABLE job_positions ADD COLUMN IF NOT EXISTS apply_channel TEXT DEFAULT ''"
         )
 
         cursor.execute('''
